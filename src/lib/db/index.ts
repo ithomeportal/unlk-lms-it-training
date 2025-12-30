@@ -1,13 +1,25 @@
 import { Pool } from 'pg';
 
+// Aiven PostgreSQL uses self-signed certificates in their chain
+// This must be set before any TLS connections are made
+if (process.env.NODE_ENV === 'production') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
+
+// Create connection pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
+  ssl: process.env.DATABASE_URL?.includes('localhost') ? false : {
+    rejectUnauthorized: false,
   },
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000,
+});
+
+// Handle connection errors
+pool.on('error', (err) => {
+  console.error('Unexpected PostgreSQL pool error:', err);
 });
 
 export async function query<T = unknown>(text: string, params?: unknown[]): Promise<T[]> {

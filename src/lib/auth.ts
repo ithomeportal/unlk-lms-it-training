@@ -38,9 +38,11 @@ export async function sendAuthCode(email: string): Promise<{ success: boolean; e
   );
 
   // Send email
+  // Note: Using Resend's default sender until unilinkportal.com domain is verified
+  // Once verified, change back to: 'Unilink LMS <noreply@unilinkportal.com>'
   try {
     await resend.emails.send({
-      from: 'Unilink LMS <noreply@unilinkportal.com>',
+      from: 'Unilink IT Training <onboarding@resend.dev>',
       to: email,
       subject: 'Your Login Code - Unilink IT Training',
       html: `
