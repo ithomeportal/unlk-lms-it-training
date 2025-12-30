@@ -3,15 +3,5 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["iad1"],
-  "env": {
-    "DATABASE_URL": "@database_url",
-    "RESEND_API_KEY": "@resend_api_key",
-    "UPLOADTHING_TOKEN": "@uploadthing_token",
-    "ANTHROPIC_API_KEY": "@anthropic_api_key",
-    "SUPER_ADMIN_EMAIL": "ithome@unilinkportal.com",
-    "SESSION_SECRET": "@session_secret",
-    "SESSION_MAX_AGE_DAYS": "30",
-    "AUTH_CODE_EXPIRY_MINUTES": "10"
-  }
+  "regions": ["iad1"]
 }

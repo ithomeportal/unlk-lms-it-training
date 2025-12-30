@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 
-interface LessonWithDetails extends Lesson {
+interface LessonWithDetails extends Omit<Lesson, 'progress' | 'attachments'> {
   attachments: LessonAttachment[];
   progress: LessonProgress | null;
 }

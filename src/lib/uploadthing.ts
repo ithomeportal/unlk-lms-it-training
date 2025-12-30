@@ -19,8 +19,7 @@ export const ourFileRouter = {
   // For lesson attachments (PDFs, ZIPs, etc.)
   attachmentUploader: f({
     pdf: { maxFileSize: '32MB', maxFileCount: 10 },
-    'application/zip': { maxFileSize: '256MB', maxFileCount: 5 },
-    'application/x-zip-compressed': { maxFileSize: '256MB', maxFileCount: 5 },
+    blob: { maxFileSize: '256MB', maxFileCount: 5 },
   })
     .middleware(async () => {
       const user = await getCurrentUser();

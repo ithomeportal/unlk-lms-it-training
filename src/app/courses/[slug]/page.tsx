@@ -9,7 +9,7 @@ interface CourseWithDetails extends Course {
   category_name: string | null;
 }
 
-interface LessonWithDetails extends Lesson {
+interface LessonWithDetails extends Omit<Lesson, 'progress' | 'attachments'> {
   attachments: LessonAttachment[];
   progress: LessonProgress | null;
 }
