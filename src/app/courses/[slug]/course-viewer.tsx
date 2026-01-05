@@ -81,9 +81,15 @@ export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex
     }
   };
 
-  // Extract Vimeo video ID from URL
+  // Extract Vimeo video ID and hash from URL (handles private videos)
   const getVimeoEmbedUrl = (url: string | null) => {
     if (!url) return null;
+    // Match URLs like: https://vimeo.com/1150452123/57aa08bfe4
+    const matchWithHash = url.match(/(?:vimeo\.com\/)(\d+)\/([a-zA-Z0-9]+)/);
+    if (matchWithHash) {
+      return `https://player.vimeo.com/video/${matchWithHash[1]}?h=${matchWithHash[2]}&autoplay=0&title=0&byline=0&portrait=0`;
+    }
+    // Match URLs like: https://vimeo.com/1150452123
     const match = url.match(/(?:vimeo\.com\/)(\d+)/);
     if (match) {
       return `https://player.vimeo.com/video/${match[1]}?autoplay=0&title=0&byline=0&portrait=0`;
