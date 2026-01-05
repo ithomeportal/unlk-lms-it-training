@@ -123,14 +123,37 @@ export default async function CoursesPage({
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {courses.map((course) => (
                   <Link key={course.id} href={`/courses/${course.slug}`}>
-                    <Card className="bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 transition-all hover:shadow-lg h-full flex flex-col">
-                      <div className="aspect-video bg-gradient-to-br from-blue-600 to-indigo-700 relative rounded-t-lg overflow-hidden">
-                        {course.thumbnail_url && (
+                    <Card className="bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 transition-all hover:shadow-lg h-full flex flex-col group">
+                      <div className="aspect-video bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 relative rounded-t-lg overflow-hidden">
+                        {course.thumbnail_url ? (
                           <img
                             src={course.thumbnail_url}
                             alt={course.title}
                             className="absolute inset-0 w-full h-full object-cover"
                           />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            {/* Decorative background pattern */}
+                            <div className="absolute inset-0 opacity-10">
+                              <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                                <defs>
+                                  <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
+                                    <path d="M 10 0 L 0 0 0 10" fill="none" stroke="white" strokeWidth="0.5"/>
+                                  </pattern>
+                                </defs>
+                                <rect width="100" height="100" fill="url(#grid)" />
+                              </svg>
+                            </div>
+                            {/* Course icon */}
+                            <div className="relative z-10 w-20 h-20 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center border border-white/20 group-hover:scale-110 transition-transform">
+                              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                              </svg>
+                            </div>
+                            {/* Decorative circles */}
+                            <div className="absolute top-4 left-4 w-16 h-16 rounded-full bg-white/5"></div>
+                            <div className="absolute bottom-4 right-4 w-24 h-24 rounded-full bg-white/5"></div>
+                          </div>
                         )}
                         {course.is_mandatory && (
                           <Badge className="absolute top-2 right-2 bg-amber-600">Required</Badge>
