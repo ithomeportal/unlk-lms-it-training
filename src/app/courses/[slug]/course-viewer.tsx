@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Course, Lesson, LessonAttachment, LessonProgress } from '@/lib/types';
@@ -9,156 +9,8 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
-// Component to beautifully render lesson content
-function LessonContent({ content }: { content: string }) {
-  const lines = content.split('\n').filter(line => line.trim());
-
-  const elements: React.ReactElement[] = [];
-  let currentTopics: { title: string; description: string }[] = [];
-  let inTopicsSection = false;
-
-  lines.forEach((line, index) => {
-    const trimmed = line.trim();
-
-    // Detect section headers
-    if (trimmed === 'Key Topics' || trimmed === 'Key Topics:') {
-      inTopicsSection = true;
-      return;
-    }
-
-    if (trimmed === 'Important Notes' || trimmed === 'Important Notes:' ||
-        trimmed === 'Prerequisites' || trimmed === 'Prerequisites:') {
-      // Flush any pending topics
-      if (currentTopics.length > 0) {
-        elements.push(
-          <div key={`topics-${index}`} className="mb-6">
-            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-              </svg>
-              Key Topics
-            </h3>
-            <div className="grid gap-3">
-              {currentTopics.map((topic, i) => (
-                <Card key={i} className="bg-slate-800/30 border-slate-700/50 hover:bg-slate-800/50 transition-colors">
-                  <CardContent className="p-4">
-                    <div className="flex gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-blue-600/20 flex items-center justify-center shrink-0">
-                        <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="font-medium text-white">{topic.title}</p>
-                        {topic.description && (
-                          <p className="text-sm text-slate-400 mt-1">{topic.description}</p>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        );
-        currentTopics = [];
-      }
-      inTopicsSection = false;
-
-      // Add Important Notes or Prerequisites section
-      const sectionTitle = trimmed.replace(':', '');
-      elements.push(
-        <div key={`section-${index}`} className="mb-4 mt-6">
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-            {sectionTitle === 'Important Notes' ? (
-              <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-            )}
-            {sectionTitle}
-          </h3>
-        </div>
-      );
-      return;
-    }
-
-    // Check if line is a topic (has " - " separator)
-    if (inTopicsSection && trimmed.includes(' - ')) {
-      const [title, ...descParts] = trimmed.split(' - ');
-      currentTopics.push({ title: title.trim(), description: descParts.join(' - ').trim() });
-      return;
-    }
-
-    // First line is usually the main title
-    if (index === 0 && !trimmed.startsWith('-')) {
-      elements.push(
-        <div key={`title-${index}`} className="mb-4 p-4 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-xl border border-blue-500/20">
-          <h2 className="text-xl font-bold text-white">{trimmed}</h2>
-        </div>
-      );
-      return;
-    }
-
-    // Second line is usually a description
-    if (index === 1 && elements.length === 1) {
-      elements.push(
-        <p key={`desc-${index}`} className="text-slate-300 mb-6 text-lg leading-relaxed">{trimmed}</p>
-      );
-      return;
-    }
-
-    // Regular paragraph or note
-    if (!inTopicsSection) {
-      elements.push(
-        <p key={`para-${index}`} className="text-slate-300 mb-3 leading-relaxed">{trimmed}</p>
-      );
-    }
-  });
-
-  // Flush remaining topics if any
-  if (currentTopics.length > 0) {
-    elements.push(
-      <div key="topics-final" className="mb-6">
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-          </svg>
-          Key Topics
-        </h3>
-        <div className="grid gap-3">
-          {currentTopics.map((topic, i) => (
-            <Card key={i} className="bg-slate-800/30 border-slate-700/50 hover:bg-slate-800/50 transition-colors">
-              <CardContent className="p-4">
-                <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-blue-600/20 flex items-center justify-center shrink-0">
-                    <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="font-medium text-white">{topic.title}</p>
-                    {topic.description && (
-                      <p className="text-sm text-slate-400 mt-1">{topic.description}</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  return <div className="mb-6">{elements}</div>;
-}
 
 interface LessonWithDetails extends Omit<Lesson, 'progress' | 'attachments'> {
   attachments: LessonAttachment[];
@@ -423,12 +275,32 @@ export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex
 
             {/* Text Content */}
             {(currentLesson.content_type === 'text' || currentLesson.content_type === 'mixed') && currentLesson.text_content && (
-              <LessonContent content={currentLesson.text_content} />
+              <div
+                className="mb-6 lesson-content text-slate-300 leading-relaxed
+                  [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-0 [&_h2]:mb-4 [&_h2]:p-4 [&_h2]:bg-gradient-to-r [&_h2]:from-blue-600/20 [&_h2]:to-purple-600/20 [&_h2]:rounded-xl [&_h2]:border [&_h2]:border-blue-500/20
+                  [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-blue-400 [&_h3]:mt-6 [&_h3]:mb-3
+                  [&_p]:mb-4 [&_p]:leading-relaxed
+                  [&_strong]:text-white [&_strong]:font-semibold
+                  [&_ul]:my-4 [&_ul]:ml-4 [&_ul]:space-y-2 [&_ul]:list-disc
+                  [&_li]:pl-2
+                  [&_a]:text-blue-400 [&_a]:underline"
+                dangerouslySetInnerHTML={{ __html: currentLesson.text_content }}
+              />
             )}
 
             {/* Description */}
             {currentLesson.description && (
-              <LessonContent content={currentLesson.description} />
+              <div
+                className="mb-6 lesson-content text-slate-300 leading-relaxed
+                  [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-0 [&_h2]:mb-4 [&_h2]:p-4 [&_h2]:bg-gradient-to-r [&_h2]:from-blue-600/20 [&_h2]:to-purple-600/20 [&_h2]:rounded-xl [&_h2]:border [&_h2]:border-blue-500/20
+                  [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-blue-400 [&_h3]:mt-6 [&_h3]:mb-3
+                  [&_p]:mb-4 [&_p]:leading-relaxed
+                  [&_strong]:text-white [&_strong]:font-semibold
+                  [&_ul]:my-4 [&_ul]:ml-4 [&_ul]:space-y-2 [&_ul]:list-disc
+                  [&_li]:pl-2
+                  [&_a]:text-blue-400 [&_a]:underline"
+                dangerouslySetInnerHTML={{ __html: currentLesson.description }}
+              />
             )}
 
             {/* Attachments */}
