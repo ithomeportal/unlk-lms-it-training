@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   title: "Unilink IT Training",
   description: "Learning Management System for Unilink Transportation IT Training",
   icons: {
-    icon: "/favicon.ico",
+    icon: "/icon.svg",
   },
 };
 
