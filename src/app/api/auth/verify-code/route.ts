@@ -9,7 +9,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email and code are required' }, { status: 400 });
     }
 
-    const result = await verifyAuthCode(email, code);
+    // Get IP address and user agent for login tracking
+    const forwardedFor = request.headers.get('x-forwarded-for');
+    const ipAddress = forwardedFor ? forwardedFor.split(',')[0].trim() : request.headers.get('x-real-ip') || 'unknown';
+    const userAgent = request.headers.get('user-agent') || undefined;
+
+    const result = await verifyAuthCode(email, code, ipAddress, userAgent);
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });

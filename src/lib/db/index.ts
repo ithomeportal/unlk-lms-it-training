@@ -1,17 +1,33 @@
 import { Pool } from 'pg';
 
-// Aiven PostgreSQL uses self-signed certificates in their chain
-// This must be set before any TLS connections are made
-if (process.env.NODE_ENV === 'production') {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+// Disable TLS certificate validation for Aiven cloud database
+// Connection is still encrypted, just not validating the self-signed CA
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+/**
+ * Database Connection Configuration
+ *
+ * Uses TLS encryption for secure connections to Aiven PostgreSQL.
+ */
+
+// Prepare SSL configuration
+function getSSLConfig() {
+  // Local development - no SSL needed
+  if (process.env.DATABASE_URL?.includes('localhost')) {
+    return false;
+  }
+
+  // Cloud databases (Aiven) - encrypted connection
+  // TLS encryption is still active, we just skip CA chain validation
+  return {
+    rejectUnauthorized: false,
+  };
 }
 
 // Create connection pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes('localhost') ? false : {
-    rejectUnauthorized: false,
-  },
+  ssl: getSSLConfig(),
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,

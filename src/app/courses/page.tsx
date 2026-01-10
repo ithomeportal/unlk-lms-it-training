@@ -89,7 +89,7 @@ export default async function CoursesPage({
           <h1 className="font-semibold text-white">Course Catalog</h1>
         </header>
         <main className="flex-1 overflow-auto p-6">
-          <div className="max-w-7xl mx-auto">
+          <div className="max-w-[120rem] mx-auto">
             {/* Category Filters */}
             <div className="flex flex-wrap gap-2 mb-6">
               <Link href="/courses">
@@ -120,7 +120,7 @@ export default async function CoursesPage({
 
             {/* Course Grid */}
             {courses.length > 0 ? (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                 {courses.map((course) => (
                   <Link key={course.id} href={`/courses/${course.slug}`}>
                     <Card className="bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 transition-all hover:shadow-lg h-full flex flex-col group">

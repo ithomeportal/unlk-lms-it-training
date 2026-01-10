@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import DOMPurify from 'isomorphic-dompurify';
 import { Course, Lesson, LessonAttachment, LessonProgress } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -10,6 +11,16 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+
+// Sanitize HTML to prevent XSS attacks
+function sanitizeHtml(html: string | null): string {
+  if (!html) return '';
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'ul', 'ol', 'li', 'strong', 'em', 'a', 'code', 'pre', 'blockquote', 'img', 'div', 'span', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+    ALLOWED_ATTR: ['href', 'src', 'alt', 'class', 'target', 'rel', 'title'],
+    ALLOW_DATA_ATTR: false,
+  });
+}
 
 
 interface LessonWithDetails extends Omit<Lesson, 'progress' | 'attachments'> {
@@ -21,14 +32,25 @@ interface CourseWithDetails extends Course {
   category_name: string | null;
 }
 
+interface QuizInfo {
+  id: string;
+  title: string;
+  question_count: number;
+  time_limit_minutes: number;
+  passing_score: number;
+  best_score: number | null;
+  passed: boolean;
+}
+
 interface CourseViewerProps {
   course: CourseWithDetails;
   lessons: LessonWithDetails[];
   currentLessonIndex: number;
   userId: string;
+  quizInfo: QuizInfo | null;
 }
 
-export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex, userId }: CourseViewerProps) {
+export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex, quizInfo }: CourseViewerProps) {
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -203,12 +225,60 @@ export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex
                 </button>
               );
             })}
+
+            {/* Quiz Section */}
+            {quizInfo && (
+              <div className="mt-4 mx-2 p-4 rounded-lg bg-gradient-to-br from-purple-900/30 to-blue-900/30 border border-purple-500/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="font-semibold text-white">Course Quiz</span>
+                </div>
+                <p className="text-sm text-slate-400 mb-3">
+                  {quizInfo.question_count} questions • {quizInfo.time_limit_minutes} min • {quizInfo.passing_score}% to pass
+                </p>
+                {quizInfo.best_score !== null && (
+                  <div className={cn(
+                    "text-sm mb-3 flex items-center gap-2",
+                    quizInfo.passed ? "text-green-400" : "text-amber-400"
+                  )}>
+                    {quizInfo.passed ? (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Passed with {Math.round(quizInfo.best_score)}%
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Best: {Math.round(quizInfo.best_score)}%
+                      </>
+                    )}
+                  </div>
+                )}
+                <Link
+                  href={`/quiz/${quizInfo.id}`}
+                  className={cn(
+                    "block w-full text-center py-2 px-4 rounded-lg font-medium transition-colors",
+                    quizInfo.passed
+                      ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                      : "bg-purple-600 text-white hover:bg-purple-700"
+                  )}
+                >
+                  {quizInfo.passed ? "Retake Quiz" : quizInfo.best_score !== null ? "Try Again" : "Take Quiz"}
+                </Link>
+              </div>
+            )}
           </div>
         </ScrollArea>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0">
         {/* Header */}
         <header className="flex items-center justify-between h-14 px-4 border-b border-slate-700 bg-slate-800/30">
           <div className="flex items-center gap-3">
@@ -255,8 +325,8 @@ export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex
         </header>
 
         {/* Content */}
-        <ScrollArea className="flex-1">
-          <div className="max-w-4xl mx-auto p-6">
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto p-6 pb-20">
             <h1 className="text-2xl font-bold text-white mb-6">{currentLesson.title}</h1>
 
             {/* Video Player */}
@@ -273,33 +343,100 @@ export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex
               </div>
             )}
 
-            {/* Text Content */}
+            {/* Text Content - Magazine Layout */}
             {(currentLesson.content_type === 'text' || currentLesson.content_type === 'mixed') && currentLesson.text_content && (
               <div
                 className="mb-6 lesson-content text-slate-300 leading-relaxed
-                  [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-0 [&_h2]:mb-4 [&_h2]:p-4 [&_h2]:bg-gradient-to-r [&_h2]:from-blue-600/20 [&_h2]:to-purple-600/20 [&_h2]:rounded-xl [&_h2]:border [&_h2]:border-blue-500/20
+                  [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-8 [&_h2]:mb-4 [&_h2]:p-4 [&_h2]:bg-gradient-to-r [&_h2]:from-blue-600/20 [&_h2]:to-purple-600/20 [&_h2]:rounded-xl [&_h2]:border [&_h2]:border-blue-500/20
+                  [&_h2:first-child]:mt-0
                   [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-blue-400 [&_h3]:mt-6 [&_h3]:mb-3
+                  [&_h4]:text-base [&_h4]:font-semibold [&_h4]:text-emerald-400 [&_h4]:mt-4 [&_h4]:mb-2
                   [&_p]:mb-4 [&_p]:leading-relaxed
                   [&_strong]:text-white [&_strong]:font-semibold
                   [&_ul]:my-4 [&_ul]:ml-4 [&_ul]:space-y-2 [&_ul]:list-disc
+                  [&_ol]:my-4 [&_ol]:ml-4 [&_ol]:space-y-2 [&_ol]:list-decimal
                   [&_li]:pl-2
-                  [&_a]:text-blue-400 [&_a]:underline"
-                dangerouslySetInnerHTML={{ __html: currentLesson.text_content }}
+                  [&_a]:text-blue-400 [&_a]:underline [&_a]:hover:text-blue-300
+
+                  [&_.lead]:text-lg [&_.lead]:text-slate-200 [&_.lead]:leading-relaxed [&_.lead]:mb-6 [&_.lead]:font-light [&_.lead]:border-l-4 [&_.lead]:border-blue-500 [&_.lead]:pl-4
+
+                  [&_.two-column]:grid [&_.two-column]:grid-cols-1 [&_.two-column]:md:grid-cols-2 [&_.two-column]:gap-6 [&_.two-column]:my-6
+                  [&_.three-column]:grid [&_.three-column]:grid-cols-1 [&_.three-column]:md:grid-cols-3 [&_.three-column]:gap-4 [&_.three-column]:my-6
+
+                  [&_.callout]:p-4 [&_.callout]:rounded-lg [&_.callout]:my-6 [&_.callout]:border-l-4
+                  [&_.callout-info]:bg-blue-900/30 [&_.callout-info]:border-blue-500
+                  [&_.callout-tip]:bg-emerald-900/30 [&_.callout-tip]:border-emerald-500
+                  [&_.callout-warning]:bg-amber-900/30 [&_.callout-warning]:border-amber-500
+                  [&_.callout-note]:bg-purple-900/30 [&_.callout-note]:border-purple-500
+                  [&_.callout-title]:font-semibold [&_.callout-title]:text-white [&_.callout-title]:mb-2 [&_.callout-title]:flex [&_.callout-title]:items-center [&_.callout-title]:gap-2
+
+                  [&_.key-concept]:bg-gradient-to-br [&_.key-concept]:from-slate-800 [&_.key-concept]:to-slate-800/50 [&_.key-concept]:p-5 [&_.key-concept]:rounded-xl [&_.key-concept]:border [&_.key-concept]:border-slate-600 [&_.key-concept]:my-6
+                  [&_.key-concept-title]:text-emerald-400 [&_.key-concept-title]:font-bold [&_.key-concept-title]:text-sm [&_.key-concept-title]:uppercase [&_.key-concept-title]:tracking-wider [&_.key-concept-title]:mb-3
+
+                  [&_.pull-quote]:text-xl [&_.pull-quote]:italic [&_.pull-quote]:text-slate-200 [&_.pull-quote]:border-l-4 [&_.pull-quote]:border-purple-500 [&_.pull-quote]:pl-6 [&_.pull-quote]:my-8 [&_.pull-quote]:py-2
+
+                  [&_.code-block]:bg-slate-950 [&_.code-block]:rounded-lg [&_.code-block]:p-4 [&_.code-block]:my-4 [&_.code-block]:font-mono [&_.code-block]:text-sm [&_.code-block]:overflow-x-auto [&_.code-block]:border [&_.code-block]:border-slate-700
+                  [&_.code-label]:text-xs [&_.code-label]:text-slate-500 [&_.code-label]:uppercase [&_.code-label]:tracking-wider [&_.code-label]:mb-2
+                  [&_code]:bg-slate-800 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-amber-400 [&_code]:text-sm [&_code]:font-mono
+
+                  [&_.figure]:my-8 [&_.figure]:text-center
+                  [&_.figure_img]:rounded-lg [&_.figure_img]:border [&_.figure_img]:border-slate-600 [&_.figure_img]:shadow-xl [&_.figure_img]:mx-auto [&_.figure_img]:max-w-full
+                  [&_.figure-caption]:text-sm [&_.figure-caption]:text-slate-400 [&_.figure-caption]:mt-3 [&_.figure-caption]:italic
+
+                  [&_.highlight-box]:bg-gradient-to-r [&_.highlight-box]:from-blue-600/10 [&_.highlight-box]:to-purple-600/10 [&_.highlight-box]:p-5 [&_.highlight-box]:rounded-xl [&_.highlight-box]:border [&_.highlight-box]:border-blue-500/30 [&_.highlight-box]:my-6
+
+                  [&_.feature-grid]:grid [&_.feature-grid]:grid-cols-2 [&_.feature-grid]:md:grid-cols-4 [&_.feature-grid]:gap-3 [&_.feature-grid]:my-6
+                  [&_.feature-item]:bg-slate-800/50 [&_.feature-item]:p-3 [&_.feature-item]:rounded-lg [&_.feature-item]:text-center [&_.feature-item]:border [&_.feature-item]:border-slate-700
+                  [&_.feature-icon]:text-2xl [&_.feature-icon]:mb-1
+                  [&_.feature-label]:text-xs [&_.feature-label]:text-slate-400
+
+                  [&_.divider]:border-t [&_.divider]:border-slate-700 [&_.divider]:my-8
+
+                  [&_.badge]:inline-flex [&_.badge]:items-center [&_.badge]:px-2.5 [&_.badge]:py-0.5 [&_.badge]:rounded-full [&_.badge]:text-xs [&_.badge]:font-medium
+                  [&_.badge-blue]:bg-blue-900/50 [&_.badge-blue]:text-blue-300
+                  [&_.badge-green]:bg-emerald-900/50 [&_.badge-green]:text-emerald-300
+                  [&_.badge-purple]:bg-purple-900/50 [&_.badge-purple]:text-purple-300"
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentLesson.text_content) }}
               />
             )}
 
-            {/* Description */}
+            {/* Description - Magazine Layout */}
             {currentLesson.description && (
               <div
                 className="mb-6 lesson-content text-slate-300 leading-relaxed
-                  [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-0 [&_h2]:mb-4 [&_h2]:p-4 [&_h2]:bg-gradient-to-r [&_h2]:from-blue-600/20 [&_h2]:to-purple-600/20 [&_h2]:rounded-xl [&_h2]:border [&_h2]:border-blue-500/20
+                  [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-8 [&_h2]:mb-4 [&_h2]:p-4 [&_h2]:bg-gradient-to-r [&_h2]:from-blue-600/20 [&_h2]:to-purple-600/20 [&_h2]:rounded-xl [&_h2]:border [&_h2]:border-blue-500/20
+                  [&_h2:first-child]:mt-0
                   [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-blue-400 [&_h3]:mt-6 [&_h3]:mb-3
+                  [&_h4]:text-base [&_h4]:font-semibold [&_h4]:text-emerald-400 [&_h4]:mt-4 [&_h4]:mb-2
                   [&_p]:mb-4 [&_p]:leading-relaxed
                   [&_strong]:text-white [&_strong]:font-semibold
                   [&_ul]:my-4 [&_ul]:ml-4 [&_ul]:space-y-2 [&_ul]:list-disc
+                  [&_ol]:my-4 [&_ol]:ml-4 [&_ol]:space-y-2 [&_ol]:list-decimal
                   [&_li]:pl-2
-                  [&_a]:text-blue-400 [&_a]:underline"
-                dangerouslySetInnerHTML={{ __html: currentLesson.description }}
+                  [&_a]:text-blue-400 [&_a]:underline [&_a]:hover:text-blue-300
+
+                  [&_.lead]:text-lg [&_.lead]:text-slate-200 [&_.lead]:leading-relaxed [&_.lead]:mb-6 [&_.lead]:font-light [&_.lead]:border-l-4 [&_.lead]:border-blue-500 [&_.lead]:pl-4
+
+                  [&_.two-column]:grid [&_.two-column]:grid-cols-1 [&_.two-column]:md:grid-cols-2 [&_.two-column]:gap-6 [&_.two-column]:my-6
+
+                  [&_.callout]:p-4 [&_.callout]:rounded-lg [&_.callout]:my-6 [&_.callout]:border-l-4
+                  [&_.callout-info]:bg-blue-900/30 [&_.callout-info]:border-blue-500
+                  [&_.callout-tip]:bg-emerald-900/30 [&_.callout-tip]:border-emerald-500
+                  [&_.callout-warning]:bg-amber-900/30 [&_.callout-warning]:border-amber-500
+                  [&_.callout-title]:font-semibold [&_.callout-title]:text-white [&_.callout-title]:mb-2
+
+                  [&_.key-concept]:bg-gradient-to-br [&_.key-concept]:from-slate-800 [&_.key-concept]:to-slate-800/50 [&_.key-concept]:p-5 [&_.key-concept]:rounded-xl [&_.key-concept]:border [&_.key-concept]:border-slate-600 [&_.key-concept]:my-6
+                  [&_.key-concept-title]:text-emerald-400 [&_.key-concept-title]:font-bold [&_.key-concept-title]:text-sm [&_.key-concept-title]:uppercase [&_.key-concept-title]:tracking-wider [&_.key-concept-title]:mb-3
+
+                  [&_.code-block]:bg-slate-950 [&_.code-block]:rounded-lg [&_.code-block]:p-4 [&_.code-block]:my-4 [&_.code-block]:font-mono [&_.code-block]:text-sm [&_.code-block]:overflow-x-auto [&_.code-block]:border [&_.code-block]:border-slate-700
+                  [&_code]:bg-slate-800 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-amber-400 [&_code]:text-sm [&_code]:font-mono
+
+                  [&_.figure]:my-8 [&_.figure]:text-center
+                  [&_.figure_img]:rounded-lg [&_.figure_img]:border [&_.figure_img]:border-slate-600 [&_.figure_img]:shadow-xl [&_.figure_img]:mx-auto [&_.figure_img]:max-w-full
+                  [&_.figure-caption]:text-sm [&_.figure-caption]:text-slate-400 [&_.figure-caption]:mt-3 [&_.figure-caption]:italic
+
+                  [&_.highlight-box]:bg-gradient-to-r [&_.highlight-box]:from-blue-600/10 [&_.highlight-box]:to-purple-600/10 [&_.highlight-box]:p-5 [&_.highlight-box]:rounded-xl [&_.highlight-box]:border [&_.highlight-box]:border-blue-500/30 [&_.highlight-box]:my-6"
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentLesson.description) }}
               />
             )}
 
@@ -362,7 +499,7 @@ export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex
               )}
             </div>
           </div>
-        </ScrollArea>
+        </div>
       </div>
     </div>
   );

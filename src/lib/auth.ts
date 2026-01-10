@@ -1,18 +1,74 @@
 import { cookies } from 'next/headers';
-import { query, queryOne, execute } from './db';
+import { randomInt } from 'crypto';
+import { queryOne, execute } from './db';
 import { User, Session } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy-load Resend client to avoid build-time initialization
+let resend: Resend | null = null;
+function getResend(): Resend {
+  if (!resend) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resend;
+}
 
 const SESSION_COOKIE_NAME = 'lms_session';
 const SESSION_MAX_AGE_DAYS = parseInt(process.env.SESSION_MAX_AGE_DAYS || '30');
 const AUTH_CODE_EXPIRY_MINUTES = parseInt(process.env.AUTH_CODE_EXPIRY_MINUTES || '10');
 
-// Generate 6-digit code
+// Rate limiting: Track code request attempts per email
+const codeRequestCounts = new Map<string, { count: number; resetAt: number }>();
+const MAX_CODE_REQUESTS = 5;  // Max requests per window
+const CODE_REQUEST_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+// Rate limiting: Track verification attempts per email
+const verifyAttempts = new Map<string, { count: number; resetAt: number }>();
+const MAX_VERIFY_ATTEMPTS = 5; // Max verification attempts per window
+const VERIFY_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+// Generate cryptographically secure 6-digit code
 function generateCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return randomInt(100000, 1000000).toString();
+}
+
+// Check rate limit for code requests
+function checkCodeRequestLimit(email: string): boolean {
+  const now = Date.now();
+  const key = email.toLowerCase();
+  const record = codeRequestCounts.get(key);
+
+  if (!record || now > record.resetAt) {
+    codeRequestCounts.set(key, { count: 1, resetAt: now + CODE_REQUEST_WINDOW_MS });
+    return true;
+  }
+
+  if (record.count >= MAX_CODE_REQUESTS) {
+    return false;
+  }
+
+  record.count++;
+  return true;
+}
+
+// Check rate limit for verification attempts
+function checkVerifyLimit(email: string): boolean {
+  const now = Date.now();
+  const key = email.toLowerCase();
+  const record = verifyAttempts.get(key);
+
+  if (!record || now > record.resetAt) {
+    verifyAttempts.set(key, { count: 1, resetAt: now + VERIFY_WINDOW_MS });
+    return true;
+  }
+
+  if (record.count >= MAX_VERIFY_ATTEMPTS) {
+    return false;
+  }
+
+  record.count++;
+  return true;
 }
 
 // Check if email domain is allowed
@@ -28,6 +84,11 @@ export async function sendAuthCode(email: string): Promise<{ success: boolean; e
     return { success: false, error: 'Email domain not authorized' };
   }
 
+  // Check rate limit
+  if (!checkCodeRequestLimit(email)) {
+    return { success: false, error: 'Too many code requests. Please try again later.' };
+  }
+
   const code = generateCode();
   const expiresAt = new Date(Date.now() + AUTH_CODE_EXPIRY_MINUTES * 60 * 1000);
 
@@ -39,7 +100,7 @@ export async function sendAuthCode(email: string): Promise<{ success: boolean; e
 
   // Send email
   try {
-    await resend.emails.send({
+    await getResend().emails.send({
       from: 'Unilink IT Training <noreply@unilinkportal.com>',
       to: email,
       subject: 'Your Login Code - Unilink IT Training',
@@ -63,7 +124,17 @@ export async function sendAuthCode(email: string): Promise<{ success: boolean; e
 }
 
 // Verify auth code and create session
-export async function verifyAuthCode(email: string, code: string): Promise<{ success: boolean; error?: string }> {
+export async function verifyAuthCode(
+  email: string,
+  code: string,
+  ipAddress?: string,
+  userAgent?: string
+): Promise<{ success: boolean; error?: string }> {
+  // Check rate limit
+  if (!checkVerifyLimit(email)) {
+    return { success: false, error: 'Too many verification attempts. Please try again later.' };
+  }
+
   const authCode = await queryOne<{ id: string; expires_at: string; used: boolean }>(
     `SELECT id, expires_at, used FROM auth_codes
      WHERE email = $1 AND code = $2
@@ -114,6 +185,27 @@ export async function verifyAuthCode(email: string, code: string): Promise<{ suc
     [user.id, token, expiresAt.toISOString()]
   );
 
+  // Get the session ID we just created
+  const session = await queryOne<{ id: string }>(
+    `SELECT id FROM sessions WHERE token = $1`,
+    [token]
+  );
+
+  // Record login history
+  if (session) {
+    await execute(
+      `INSERT INTO login_history (user_id, session_id, logged_in_at, ip_address, user_agent)
+       VALUES ($1, $2, NOW(), $3, $4)`,
+      [user.id, session.id, ipAddress || null, userAgent || null]
+    );
+  }
+
+  // Update user's last_login_at
+  await execute(
+    `UPDATE users SET last_login_at = NOW() WHERE id = $1`,
+    [user.id]
+  );
+
   // Set cookie
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, token, {
@@ -150,6 +242,23 @@ export async function logout(): Promise<void> {
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   if (token) {
+    // Get the session to find the login history record
+    const session = await queryOne<{ id: string }>(
+      `SELECT id FROM sessions WHERE token = $1`,
+      [token]
+    );
+
+    if (session) {
+      // Update login_history with logout time and calculate session duration
+      await execute(
+        `UPDATE login_history
+         SET logged_out_at = NOW(),
+             session_duration_seconds = EXTRACT(EPOCH FROM (NOW() - logged_in_at))::INTEGER
+         WHERE session_id = $1 AND logged_out_at IS NULL`,
+        [session.id]
+      );
+    }
+
     await execute(`DELETE FROM sessions WHERE token = $1`, [token]);
   }
 

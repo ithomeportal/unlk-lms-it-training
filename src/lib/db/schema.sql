@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
     avatar_url TEXT,
     role VARCHAR(50) DEFAULT 'learner' CHECK (role IN ('super_admin', 'admin', 'instructor', 'learner')),
     is_active BOOLEAN DEFAULT true,
+    last_login_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -30,6 +31,19 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     token VARCHAR(255) UNIQUE NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Login history for tracking user sessions
+CREATE TABLE IF NOT EXISTS login_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    session_id UUID REFERENCES sessions(id) ON DELETE SET NULL,
+    logged_in_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    logged_out_at TIMESTAMP WITH TIME ZONE,
+    session_duration_seconds INTEGER,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -172,6 +186,8 @@ CREATE INDEX IF NOT EXISTS idx_enrollments_course ON enrollments(course_id);
 CREATE INDEX IF NOT EXISTS idx_lesson_progress_user ON lesson_progress(user_id);
 CREATE INDEX IF NOT EXISTS idx_lesson_progress_lesson ON lesson_progress(lesson_id);
 CREATE INDEX IF NOT EXISTS idx_content_embeddings_lesson ON content_embeddings(lesson_id);
+CREATE INDEX IF NOT EXISTS idx_login_history_user ON login_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_login_history_logged_in ON login_history(logged_in_at DESC);
 
 -- Create vector index for similarity search
 CREATE INDEX IF NOT EXISTS idx_content_embeddings_vector ON content_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);

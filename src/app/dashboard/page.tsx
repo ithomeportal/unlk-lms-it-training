@@ -2,7 +2,6 @@ import { getCurrentUser } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 
 interface DashboardStats {
@@ -197,7 +196,7 @@ export default async function DashboardPage() {
       <div>
         <h2 className="text-xl font-semibold text-white mb-4">Continue Learning</h2>
         {recentCourses.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
             {recentCourses.map((course) => (
               <Link key={course.id} href={`/courses/${course.slug}`}>
                 <Card className="bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 transition-colors h-full">

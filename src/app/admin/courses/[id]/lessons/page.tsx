@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, use, useCallback } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
@@ -31,7 +30,6 @@ interface Course {
 
 export default function LessonsManagementPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: courseId } = use(params);
-  const router = useRouter();
   const [course, setCourse] = useState<Course | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,11 +44,7 @@ export default function LessonsManagementPage({ params }: { params: Promise<{ id
     duration_minutes: 0,
   });
 
-  useEffect(() => {
-    loadData();
-  }, [courseId]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [courseRes, lessonsRes] = await Promise.all([
         fetch(`/api/courses/${courseId}`),
@@ -71,7 +65,11 @@ export default function LessonsManagementPage({ params }: { params: Promise<{ id
     } finally {
       setLoading(false);
     }
-  };
+  }, [courseId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

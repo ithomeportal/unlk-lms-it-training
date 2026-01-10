@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser, isAdmin } from '@/lib/auth';
-import { query, queryOne, execute } from '@/lib/db';
+import { query, queryOne } from '@/lib/db';
 
 function slugify(text: string): string {
   return text

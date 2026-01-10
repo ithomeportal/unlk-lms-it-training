@@ -5,6 +5,7 @@ export interface User {
   avatar_url: string | null;
   role: 'super_admin' | 'admin' | 'instructor' | 'learner';
   is_active: boolean;
+  last_login_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -14,6 +15,18 @@ export interface Session {
   user_id: string;
   token: string;
   expires_at: string;
+  created_at: string;
+}
+
+export interface LoginHistory {
+  id: string;
+  user_id: string;
+  session_id: string | null;
+  logged_in_at: string;
+  logged_out_at: string | null;
+  session_duration_seconds: number | null;
+  ip_address: string | null;
+  user_agent: string | null;
   created_at: string;
 }
 
