@@ -21,6 +21,7 @@ export function SearchHistorySection({ initialHistory }: SearchHistorySectionPro
   const [history, setHistory] = useState(initialHistory);
   const [isClearing, setIsClearing] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', {
@@ -107,7 +108,7 @@ export function SearchHistorySection({ initialHistory }: SearchHistorySectionPro
                     <p className="font-medium text-white mb-1">
                       &ldquo;{item.query}&rdquo;
                     </p>
-                    {item.ai_answer && (
+                    {item.ai_answer && expandedId !== item.id && (
                       <p className="text-sm text-slate-400 line-clamp-2 mb-2">
                         {stripHtml(item.ai_answer).substring(0, 150)}...
                       </p>
@@ -119,6 +120,21 @@ export function SearchHistorySection({ initialHistory }: SearchHistorySectionPro
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    {item.ai_answer && (
+                      <button
+                        onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                        className="p-2 text-slate-400 hover:text-blue-400 hover:bg-slate-600/50 rounded transition-colors"
+                        title={expandedId === item.id ? "Collapse answer" : "View full answer"}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          {expandedId === item.id ? (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                          ) : (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          )}
+                        </svg>
+                      </button>
+                    )}
                     <Link
                       href={`/search?q=${encodeURIComponent(item.query)}`}
                       className="p-2 text-slate-400 hover:text-purple-400 hover:bg-slate-600/50 rounded transition-colors"
@@ -140,6 +156,22 @@ export function SearchHistorySection({ initialHistory }: SearchHistorySectionPro
                     </button>
                   </div>
                 </div>
+
+                {/* Expanded AI Answer */}
+                {expandedId === item.id && item.ai_answer && (
+                  <div className="mt-4 pt-4 border-t border-slate-600/50">
+                    <div className="flex items-center gap-2 mb-3">
+                      <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      <span className="text-sm font-medium text-purple-300">AI Answer</span>
+                    </div>
+                    <div
+                      className="text-slate-300 prose prose-invert prose-purple prose-sm max-w-none"
+                      dangerouslySetInnerHTML={{ __html: item.ai_answer }}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>
