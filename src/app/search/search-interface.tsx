@@ -116,7 +116,10 @@ export function SearchInterface() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-white leading-relaxed">{answer}</p>
+            <div
+              className="text-white leading-relaxed prose prose-invert prose-purple max-w-none"
+              dangerouslySetInnerHTML={{ __html: answer }}
+            />
           </CardContent>
         </Card>
       )}

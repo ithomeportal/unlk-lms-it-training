@@ -126,16 +126,31 @@ User's search query: "${searchQuery}"
 
 Please:
 1. Identify which content chunks (by their numbers in brackets) best answer the user's query
-2. Provide a helpful, comprehensive answer based on the matched content
+2. Provide a helpful, well-structured answer based on the matched content
 3. Reference specific courses/lessons when relevant
+
+IMPORTANT: Format the answer as clean HTML for a magazine-style presentation. Use these elements:
+- <h3> for section headings (styled with class="text-purple-300 font-semibold mt-4 mb-2")
+- <p> for paragraphs (with class="mb-3")
+- <ul> and <li> for bullet lists (with class="list-disc list-inside mb-3 space-y-1")
+- <code> for inline code or technical terms (with class="bg-slate-700 px-1.5 py-0.5 rounded text-purple-300 text-sm")
+- <strong> for emphasis
+
+Example format:
+<h3 class="text-purple-300 font-semibold mt-4 mb-2">Section Title</h3>
+<p class="mb-3">Explanation paragraph here.</p>
+<ul class="list-disc list-inside mb-3 space-y-1">
+  <li>Key point one</li>
+  <li>Key point two</li>
+</ul>
 
 Respond in JSON format:
 {
   "relevant_chunks": [1, 3, 5],
-  "answer": "Your helpful answer here..."
+  "answer": "<h3 class=\\"...\\">Section</h3><p class=\\"...\\">Content...</p>"
 }
 
-Only include chunk numbers that are actually relevant. If the content doesn't fully answer the query, acknowledge that.`
+Only include chunk numbers that are actually relevant. Keep the answer concise but well-organized.`
         }
       ]
     });
