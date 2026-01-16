@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,37 +24,97 @@ interface SearchInterfaceProps {
 export function SearchInterface({ initialQuery }: SearchInterfaceProps) {
   const [query, setQuery] = useState(initialQuery || '');
   const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [answer, setAnswer] = useState<string | null>(null);
+  const [answer, setAnswer] = useState<string>('');
   const [searched, setSearched] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const performSearch = async (searchQuery: string) => {
     if (!searchQuery.trim()) return;
 
+    // Cancel any existing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    abortControllerRef.current = new AbortController();
     setLoading(true);
+    setStreaming(false);
     setSearched(true);
+    setResults([]);
+    setAnswer('');
 
     try {
       const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: searchQuery }),
+        body: JSON.stringify({ query: searchQuery, stream: true }),
+        signal: abortControllerRef.current.signal,
       });
 
-      const data = await res.json();
-
-      if (res.ok) {
-        setResults(data.results || []);
-        setAnswer(data.answer || null);
-      } else {
-        setResults([]);
-        setAnswer('An error occurred while searching.');
+      if (!res.ok) {
+        throw new Error('Search failed');
       }
-    } catch {
-      setResults([]);
-      setAnswer('Network error. Please try again.');
-    } finally {
+
+      const contentType = res.headers.get('content-type');
+
+      // Handle streaming response
+      if (contentType?.includes('text/event-stream')) {
+        setLoading(false);
+        setStreaming(true);
+
+        const reader = res.body?.getReader();
+        const decoder = new TextDecoder();
+
+        if (!reader) throw new Error('No reader available');
+
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+
+                if (data.type === 'results') {
+                  setResults(data.results || []);
+                } else if (data.type === 'answer_chunk') {
+                  setAnswer(prev => prev + data.text);
+                } else if (data.type === 'done') {
+                  setStreaming(false);
+                } else if (data.type === 'error') {
+                  setAnswer('<p class="mb-3 text-red-400">Sorry, there was an error generating the answer.</p>');
+                  setStreaming(false);
+                }
+              } catch {
+                // Skip malformed JSON
+              }
+            }
+          }
+        }
+      } else {
+        // Handle non-streaming response (fallback)
+        const data = await res.json();
+        setResults(data.results || []);
+        setAnswer(data.answer || '');
+        setLoading(false);
+      }
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        return; // Request was cancelled
+      }
+      console.error('Search error:', error);
+      setAnswer('<p class="mb-3 text-red-400">Network error. Please try again.</p>');
       setLoading(false);
+      setStreaming(false);
     }
   };
 
@@ -63,6 +123,12 @@ export function SearchInterface({ initialQuery }: SearchInterfaceProps) {
     if (initialQuery) {
       performSearch(initialQuery);
     }
+    // Cleanup on unmount
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [initialQuery]);
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -120,7 +186,7 @@ export function SearchInterface({ initialQuery }: SearchInterfaceProps) {
       </form>
 
       {/* AI Answer */}
-      {answer && (
+      {(answer || streaming) && (
         <Card className="mb-6 bg-gradient-to-br from-purple-900/30 to-indigo-900/30 border-purple-700/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg text-purple-300 flex items-center gap-2">
@@ -128,13 +194,26 @@ export function SearchInterface({ initialQuery }: SearchInterfaceProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
               AI Answer
+              {streaming && (
+                <span className="ml-2 flex items-center gap-1 text-sm text-purple-400">
+                  <span className="animate-pulse">●</span>
+                  Generating...
+                </span>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div
               className="text-white leading-relaxed prose prose-invert prose-purple max-w-none"
-              dangerouslySetInnerHTML={{ __html: answer }}
+              dangerouslySetInnerHTML={{ __html: answer || '<p class="text-slate-400">Thinking...</p>' }}
             />
+            {streaming && !answer && (
+              <div className="flex items-center gap-2 text-slate-400">
+                <div className="animate-pulse">●</div>
+                <div className="animate-pulse delay-100">●</div>
+                <div className="animate-pulse delay-200">●</div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -176,7 +255,7 @@ export function SearchInterface({ initialQuery }: SearchInterfaceProps) {
                 ))}
               </div>
             </>
-          ) : !loading && (
+          ) : !loading && !streaming && (
             <Card className="bg-slate-800/50 border-slate-700">
               <CardContent className="py-8 text-center">
                 <p className="text-slate-400">No specific lessons found for your query.</p>
@@ -194,9 +273,9 @@ export function SearchInterface({ initialQuery }: SearchInterfaceProps) {
             {[
               'How do I create visualizations?',
               'Data loading best practices',
-              'User permissions setup',
+              'What is a DOT number?',
+              'Freight broker terminology',
               'Dashboard customization',
-              'API keys management',
             ].map((example) => (
               <button
                 key={example}
