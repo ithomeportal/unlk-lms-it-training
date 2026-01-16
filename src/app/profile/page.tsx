@@ -9,7 +9,6 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/s
 import { AppSidebar } from '@/components/layout/app-sidebar';
 import { Separator } from '@/components/ui/separator';
 import { ProfileEditor } from '@/components/profile/profile-editor';
-import { SearchHistorySection } from '@/components/profile/search-history-section';
 import Link from 'next/link';
 
 interface UserStats {
@@ -33,14 +32,6 @@ interface InProgressCourse {
   slug: string;
   progress_percent: number;
   last_accessed: string;
-}
-
-interface SearchHistoryItem {
-  id: string;
-  query: string;
-  ai_answer: string;
-  result_count: number;
-  searched_at: string;
 }
 
 export default async function ProfilePage() {
@@ -94,15 +85,6 @@ export default async function ProfilePage() {
     JOIN courses c ON c.id = e.course_id
     WHERE e.user_id = $1 AND e.completed_at IS NULL AND c.is_published = true
     ORDER BY last_accessed DESC
-  `, [user.id]);
-
-  // Get search history
-  const searchHistory = await query<SearchHistoryItem>(`
-    SELECT id, query, ai_answer, result_count, searched_at
-    FROM search_history
-    WHERE user_id = $1
-    ORDER BY searched_at DESC
-    LIMIT 10
   `, [user.id]);
 
   const getInitials = (name: string | null, email: string) => {
@@ -286,8 +268,6 @@ export default async function ProfilePage() {
               </CardContent>
             </Card>
 
-            {/* Search History */}
-            <SearchHistorySection initialHistory={searchHistory} />
           </div>
         </main>
       </SidebarInset>

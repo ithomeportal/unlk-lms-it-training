@@ -13,6 +13,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -21,12 +24,35 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { User } from '@/lib/types';
 
-const mainNav = [
+interface NavItem {
+  title: string;
+  url: string;
+  icon: React.ComponentType;
+  subItems?: { title: string; url: string }[];
+}
+
+const mainNav: NavItem[] = [
   { title: 'Dashboard', url: '/dashboard', icon: HomeIcon },
-  { title: 'My Courses', url: '/courses', icon: BookIcon },
-  { title: 'Search', url: '/search', icon: SearchIcon },
+  {
+    title: 'Courses Catalog',
+    url: '/courses',
+    icon: BookIcon,
+    subItems: [
+      { title: 'My Progress', url: '/courses/progress' },
+      { title: 'Completed', url: '/courses/completed' },
+    ]
+  },
+  {
+    title: 'Search',
+    url: '/search',
+    icon: SearchIcon,
+    subItems: [
+      { title: 'Search History', url: '/search/history' },
+    ]
+  },
 ];
 
 const adminNav = [
@@ -145,16 +171,60 @@ export function AppSidebar({ user }: AppSidebarProps) {
             <SidebarMenu>
               {mainNav.map((item) => (
                 <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.url}
-                    className="hover:bg-slate-700/50"
-                  >
-                    <Link href={item.url}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
+                  {item.subItems ? (
+                    <Collapsible defaultOpen={pathname.startsWith(item.url)} className="group/collapsible">
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuButton
+                          isActive={pathname === item.url}
+                          className="hover:bg-slate-700/50"
+                        >
+                          <item.icon />
+                          <span>{item.title}</span>
+                          <svg
+                            className="ml-auto w-4 h-4 transition-transform group-data-[state=open]/collapsible:rotate-90"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <SidebarMenuSub>
+                          <SidebarMenuSubItem>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={pathname === item.url}
+                            >
+                              <Link href={item.url}>All {item.title}</Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                          {item.subItems.map((subItem) => (
+                            <SidebarMenuSubItem key={subItem.url}>
+                              <SidebarMenuSubButton
+                                asChild
+                                isActive={pathname === subItem.url}
+                              >
+                                <Link href={subItem.url}>{subItem.title}</Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  ) : (
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname === item.url}
+                      className="hover:bg-slate-700/50"
+                    >
+                      <Link href={item.url}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  )}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>

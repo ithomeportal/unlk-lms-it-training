@@ -51,7 +51,7 @@ export default async function DashboardPage() {
     total_time_minutes: 0
   };
 
-  // Get recent courses
+  // Get recent courses (up to 24 for 6 columns x 4 rows)
   const recentCourses = await query<RecentCourse>(`
     SELECT DISTINCT ON (c.id)
       c.id, c.title, c.slug, c.thumbnail_url,
@@ -69,7 +69,7 @@ export default async function DashboardPage() {
     WHERE e.user_id = $1 AND c.is_published = true
     GROUP BY c.id, c.title, c.slug, c.thumbnail_url, e.enrolled_at
     ORDER BY c.id, last_accessed DESC
-    LIMIT 4
+    LIMIT 24
   `, [user.id]);
 
   // Get mandatory courses with upcoming deadlines
@@ -194,13 +194,20 @@ export default async function DashboardPage() {
 
       {/* Continue Learning */}
       <div>
-        <h2 className="text-xl font-semibold text-white mb-4">Continue Learning</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-white">Continue Learning</h2>
+          {recentCourses.length > 0 && (
+            <Link href="/courses/progress" className="text-sm text-blue-400 hover:text-blue-300">
+              View all →
+            </Link>
+          )}
+        </div>
         {recentCourses.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {recentCourses.map((course) => (
               <Link key={course.id} href={`/courses/${course.slug}`}>
                 <Card className="bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 transition-colors h-full">
-                  <div className="aspect-video bg-gradient-to-br from-blue-600 to-indigo-700 relative">
+                  <div className="aspect-[4/3] bg-gradient-to-br from-blue-600 to-indigo-700 relative rounded-t-lg overflow-hidden">
                     {course.thumbnail_url && (
                       <img
                         src={course.thumbnail_url}
@@ -208,16 +215,16 @@ export default async function DashboardPage() {
                         className="absolute inset-0 w-full h-full object-cover"
                       />
                     )}
-                    <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80">
+                    <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/80">
                       <Progress value={course.progress_percent} className="h-1" />
                     </div>
+                    <div className="absolute top-1 right-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded">
+                      {course.progress_percent}%
+                    </div>
                   </div>
-                  <CardHeader className="p-4">
-                    <CardTitle className="text-base text-white line-clamp-2">{course.title}</CardTitle>
-                    <CardDescription className="text-slate-400">
-                      {course.progress_percent}% complete
-                    </CardDescription>
-                  </CardHeader>
+                  <CardContent className="p-2">
+                    <p className="text-sm font-medium text-white line-clamp-2 leading-tight">{course.title}</p>
+                  </CardContent>
                 </Card>
               </Link>
             ))}
