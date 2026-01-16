@@ -123,6 +123,7 @@ export default async function CourseViewerPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect('/login');
+  if (!user.name) redirect('/complete-profile');
 
   const { slug } = await params;
   const { lesson: lessonParam } = await searchParams;

@@ -214,6 +214,26 @@ Only include chunk numbers that are actually relevant. Keep the answer concise b
       }
     }
 
+    // Auto-save search to history
+    try {
+      const historyResult = await query<{ id: string }>(`
+        INSERT INTO search_history (user_id, query, ai_answer, result_count)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id
+      `, [user.id, searchQuery, answer, results.length]);
+
+      // Also save to RAG Q&A candidates for potential knowledge base enhancement
+      if (historyResult.length > 0 && answer && answer.length > 50) {
+        await query(`
+          INSERT INTO rag_qa_candidates (search_history_id, question, answer)
+          VALUES ($1, $2, $3)
+        `, [historyResult[0].id, searchQuery, answer]);
+      }
+    } catch (saveError) {
+      // Don't fail the search if saving history fails
+      console.error('Failed to save search history:', saveError);
+    }
+
     return NextResponse.json({ results, answer });
   } catch (error) {
     console.error('Search error:', error);

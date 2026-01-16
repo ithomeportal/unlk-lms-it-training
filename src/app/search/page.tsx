@@ -5,9 +5,16 @@ import { AppSidebar } from '@/components/layout/app-sidebar';
 import { Separator } from '@/components/ui/separator';
 import { SearchInterface } from './search-interface';
 
-export default async function SearchPage() {
+interface SearchPageProps {
+  searchParams: Promise<{ q?: string }>;
+}
+
+export default async function SearchPage({ searchParams }: SearchPageProps) {
   const user = await getCurrentUser();
   if (!user) redirect('/login');
+  if (!user.name) redirect('/complete-profile');
+
+  const { q } = await searchParams;
 
   return (
     <SidebarProvider>
@@ -19,7 +26,7 @@ export default async function SearchPage() {
           <h1 className="font-semibold text-white">AI-Powered Search</h1>
         </header>
         <main className="flex-1 overflow-auto p-6">
-          <SearchInterface />
+          <SearchInterface initialQuery={q} />
         </main>
       </SidebarInset>
     </SidebarProvider>

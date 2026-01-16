@@ -37,6 +37,7 @@ export default async function CoursesPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect('/login');
+  if (!user.name) redirect('/complete-profile');
 
   const params = await searchParams;
   const categoryFilter = params.category;

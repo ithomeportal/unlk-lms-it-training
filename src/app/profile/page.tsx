@@ -8,6 +8,8 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/app-sidebar';
 import { Separator } from '@/components/ui/separator';
+import { ProfileEditor } from '@/components/profile/profile-editor';
+import { SearchHistorySection } from '@/components/profile/search-history-section';
 import Link from 'next/link';
 
 interface UserStats {
@@ -31,6 +33,14 @@ interface InProgressCourse {
   slug: string;
   progress_percent: number;
   last_accessed: string;
+}
+
+interface SearchHistoryItem {
+  id: string;
+  query: string;
+  ai_answer: string;
+  result_count: number;
+  searched_at: string;
 }
 
 export default async function ProfilePage() {
@@ -86,6 +96,15 @@ export default async function ProfilePage() {
     ORDER BY last_accessed DESC
   `, [user.id]);
 
+  // Get search history
+  const searchHistory = await query<SearchHistoryItem>(`
+    SELECT id, query, ai_answer, result_count, searched_at
+    FROM search_history
+    WHERE user_id = $1
+    ORDER BY searched_at DESC
+    LIMIT 10
+  `, [user.id]);
+
   const getInitials = (name: string | null, email: string) => {
     if (name) {
       return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -129,17 +148,22 @@ export default async function ProfilePage() {
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
-                    <h2 className="text-2xl font-bold text-white">
-                      {user.name || user.email.split('@')[0]}
-                    </h2>
-                    <p className="text-slate-400">{user.email}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Badge variant="outline" className="border-slate-600 text-slate-300">
-                        {user.role === 'admin' ? 'Administrator' : 'Learner'}
-                      </Badge>
-                      <span className="text-sm text-slate-500">
-                        Member since {formatDate(user.created_at)}
-                      </span>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h2 className="text-2xl font-bold text-white">
+                          {user.name || user.email.split('@')[0]}
+                        </h2>
+                        <p className="text-slate-400">{user.email}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge variant="outline" className="border-slate-600 text-slate-300">
+                            {user.role === 'admin' ? 'Administrator' : 'Learner'}
+                          </Badge>
+                          <span className="text-sm text-slate-500">
+                            Member since {formatDate(user.created_at)}
+                          </span>
+                        </div>
+                      </div>
+                      <ProfileEditor currentName={user.name} email={user.email} />
                     </div>
                   </div>
                 </div>
@@ -261,6 +285,9 @@ export default async function ProfilePage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Search History */}
+            <SearchHistorySection initialHistory={searchHistory} />
           </div>
         </main>
       </SidebarInset>

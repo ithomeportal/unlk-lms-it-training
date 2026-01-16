@@ -15,6 +15,11 @@ export default async function DashboardLayout({
     redirect('/login');
   }
 
+  // Redirect to complete profile if user hasn't set their name
+  if (!user.name) {
+    redirect('/complete-profile');
+  }
+
   return (
     <SidebarProvider>
       <AppSidebar user={user} />

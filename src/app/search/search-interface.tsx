@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,16 +17,19 @@ interface SearchResult {
   relevance_score: number;
 }
 
-export function SearchInterface() {
-  const [query, setQuery] = useState('');
+interface SearchInterfaceProps {
+  initialQuery?: string;
+}
+
+export function SearchInterface({ initialQuery }: SearchInterfaceProps) {
+  const [query, setQuery] = useState(initialQuery || '');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [answer, setAnswer] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
+  const performSearch = async (searchQuery: string) => {
+    if (!searchQuery.trim()) return;
 
     setLoading(true);
     setSearched(true);
@@ -35,7 +38,7 @@ export function SearchInterface() {
       const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ query: searchQuery }),
       });
 
       const data = await res.json();
@@ -53,6 +56,18 @@ export function SearchInterface() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Auto-search if initialQuery is provided
+  useEffect(() => {
+    if (initialQuery) {
+      performSearch(initialQuery);
+    }
+  }, [initialQuery]);
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await performSearch(query);
   };
 
   return (

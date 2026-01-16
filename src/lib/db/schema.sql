@@ -173,6 +173,26 @@ CREATE TABLE IF NOT EXISTS quiz_questions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Search history for user archive
+CREATE TABLE IF NOT EXISTS search_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+    query TEXT NOT NULL,
+    ai_answer TEXT,
+    result_count INTEGER DEFAULT 0,
+    searched_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- RAG Q&A candidates for knowledge base enhancement
+CREATE TABLE IF NOT EXISTS rag_qa_candidates (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    search_history_id UUID REFERENCES search_history(id) ON DELETE CASCADE,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    is_approved BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
@@ -188,6 +208,8 @@ CREATE INDEX IF NOT EXISTS idx_lesson_progress_lesson ON lesson_progress(lesson_
 CREATE INDEX IF NOT EXISTS idx_content_embeddings_lesson ON content_embeddings(lesson_id);
 CREATE INDEX IF NOT EXISTS idx_login_history_user ON login_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_login_history_logged_in ON login_history(logged_in_at DESC);
+CREATE INDEX IF NOT EXISTS idx_search_history_user ON search_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_search_history_user_date ON search_history(user_id, searched_at DESC);
 
 -- Create vector index for similarity search
 CREATE INDEX IF NOT EXISTS idx_content_embeddings_vector ON content_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
