@@ -3,6 +3,8 @@ import { getCurrentUser } from '@/lib/auth';
 import { query, queryOne, execute } from '@/lib/db';
 import { Course, Lesson, LessonAttachment, LessonProgress } from '@/lib/types';
 import { CourseViewer } from './course-viewer';
+import { LockedCourseView } from './locked-view';
+import { checkPrerequisitesMet } from '@/lib/prerequisites';
 
 interface CourseWithDetails extends Course {
   category_name: string | null;
@@ -130,6 +132,24 @@ export default async function CourseViewerPage({
 
   const course = await getCourse(slug);
   if (!course) notFound();
+
+  // Check if prerequisites are met
+  const { allMet, prerequisites } = await checkPrerequisitesMet(user.id, course.id);
+
+  if (!allMet) {
+    return (
+      <LockedCourseView
+        course={{
+          id: course.id,
+          title: course.title,
+          description: course.description,
+          thumbnail_url: course.thumbnail_url,
+          category_name: course.category_name,
+        }}
+        prerequisites={prerequisites}
+      />
+    );
+  }
 
   await ensureEnrollment(user.id, course.id);
 

@@ -51,8 +51,8 @@ export default function NewCoursePage() {
         return;
       }
 
-      toast.success('Course created successfully');
-      router.push(`/admin/courses/${data.course.id}/lessons`);
+      toast.success('Course created! Now add lessons and configure prerequisites.');
+      router.push(`/admin/courses/${data.course.id}`);
     } catch {
       toast.error('Network error');
     } finally {

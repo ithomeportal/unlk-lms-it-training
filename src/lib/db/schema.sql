@@ -214,6 +214,19 @@ CREATE INDEX IF NOT EXISTS idx_search_history_user_date ON search_history(user_i
 -- Create vector index for similarity search
 CREATE INDEX IF NOT EXISTS idx_content_embeddings_vector ON content_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
+-- Course prerequisites (many-to-many relationship)
+CREATE TABLE IF NOT EXISTS course_prerequisites (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    course_id UUID REFERENCES courses(id) ON DELETE CASCADE,
+    prerequisite_course_id UUID REFERENCES courses(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(course_id, prerequisite_course_id),
+    CHECK (course_id != prerequisite_course_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_prerequisites_course ON course_prerequisites(course_id);
+CREATE INDEX IF NOT EXISTS idx_prerequisites_prereq ON course_prerequisites(prerequisite_course_id);
+
 -- Insert super admin user
 INSERT INTO users (email, name, role)
 VALUES ('ithome@unilinkportal.com', 'IT Home Admin', 'super_admin')

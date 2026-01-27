@@ -120,3 +120,21 @@ export interface MandatoryAssignment {
   created_by: string | null;
   created_at: string;
 }
+
+export interface CoursePrerequisite {
+  id: string;
+  course_id: string;
+  prerequisite_course_id: string;
+  created_at: string;
+}
+
+export interface PrerequisiteStatus {
+  course_id: string;
+  title: string;
+  slug: string;
+  is_completed: boolean;
+  lessons_completed: number;
+  total_lessons: number;
+  quiz_passed: boolean;
+  quiz_exists: boolean;
+}

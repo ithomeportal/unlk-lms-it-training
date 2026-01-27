@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/app-sidebar';
 import { Separator } from '@/components/ui/separator';
+import { checkPrerequisitesMet } from '@/lib/prerequisites';
 
 interface CourseWithProgress {
   id: string;
@@ -22,6 +23,7 @@ interface CourseWithProgress {
   lesson_count: number;
   is_enrolled: boolean;
   progress_percent: number;
+  prerequisite_count: number;
 }
 
 interface Category {
@@ -65,13 +67,25 @@ export default async function CoursesPage({
          LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.user_id = $1
          WHERE l.course_id = c.id),
         0
-      )::int as progress_percent
+      )::int as progress_percent,
+      (SELECT COUNT(*) FROM course_prerequisites WHERE course_id = c.id)::int as prerequisite_count
     FROM courses c
     LEFT JOIN categories cat ON cat.id = c.category_id
     WHERE c.is_published = true
       ${categoryFilter ? 'AND cat.slug = $2' : ''}
     ORDER BY c.is_mandatory DESC, c.title
   `, categoryFilter ? [user.id, categoryFilter] : [user.id]);
+
+  // Check prerequisites for each course that has them
+  const coursesWithLockStatus = await Promise.all(
+    courses.map(async (course) => {
+      if (course.prerequisite_count === 0) {
+        return { ...course, is_locked: false };
+      }
+      const { allMet } = await checkPrerequisitesMet(user.id, course.id);
+      return { ...course, is_locked: !allMet };
+    })
+  );
 
   const formatDuration = (minutes: number) => {
     if (minutes < 60) return `${minutes} min`;
@@ -120,17 +134,17 @@ export default async function CoursesPage({
             </div>
 
             {/* Course Grid */}
-            {courses.length > 0 ? (
+            {coursesWithLockStatus.length > 0 ? (
               <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                {courses.map((course) => (
+                {coursesWithLockStatus.map((course) => (
                   <Link key={course.id} href={`/courses/${course.slug}`}>
-                    <Card className="bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 transition-all hover:shadow-lg h-full flex flex-col group">
+                    <Card className={`bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 transition-all hover:shadow-lg h-full flex flex-col group ${course.is_locked ? 'opacity-75' : ''}`}>
                       <div className="aspect-video bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 relative rounded-t-lg overflow-hidden">
                         {course.thumbnail_url ? (
                           <img
                             src={course.thumbnail_url}
                             alt={course.title}
-                            className="absolute inset-0 w-full h-full object-cover"
+                            className={`absolute inset-0 w-full h-full object-cover ${course.is_locked ? 'opacity-60' : ''}`}
                           />
                         ) : (
                           <div className="absolute inset-0 flex items-center justify-center">
@@ -146,7 +160,7 @@ export default async function CoursesPage({
                               </svg>
                             </div>
                             {/* Course icon */}
-                            <div className="relative z-10 w-20 h-20 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center border border-white/20 group-hover:scale-110 transition-transform">
+                            <div className={`relative z-10 w-20 h-20 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center border border-white/20 group-hover:scale-110 transition-transform ${course.is_locked ? 'opacity-60' : ''}`}>
                               <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                               </svg>
@@ -156,10 +170,28 @@ export default async function CoursesPage({
                             <div className="absolute bottom-4 right-4 w-24 h-24 rounded-full bg-white/5"></div>
                           </div>
                         )}
-                        {course.is_mandatory && (
+                        {/* Lock overlay for locked courses */}
+                        {course.is_locked && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40">
+                            <div className="w-12 h-12 rounded-full bg-amber-600/30 flex items-center justify-center border border-amber-500/50">
+                              <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                              </svg>
+                            </div>
+                          </div>
+                        )}
+                        {course.is_mandatory && !course.is_locked && (
                           <Badge className="absolute top-2 right-2 bg-amber-600">Required</Badge>
                         )}
-                        {course.is_enrolled && course.progress_percent > 0 && (
+                        {course.is_locked && (
+                          <Badge className="absolute top-2 right-2 bg-amber-600/80 border border-amber-500/50">
+                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                            Locked
+                          </Badge>
+                        )}
+                        {!course.is_locked && course.is_enrolled && course.progress_percent > 0 && (
                           <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80">
                             <Progress value={course.progress_percent} className="h-1.5" />
                           </div>
@@ -187,7 +219,15 @@ export default async function CoursesPage({
                           <span>{course.lesson_count} lessons</span>
                           <span>{formatDuration(course.duration_minutes)}</span>
                         </div>
-                        {course.is_enrolled && (
+                        {course.is_locked && (
+                          <div className="mt-2 text-xs text-amber-400 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Prerequisites required
+                          </div>
+                        )}
+                        {!course.is_locked && course.is_enrolled && (
                           <div className="mt-2 flex items-center gap-2">
                             <Progress value={course.progress_percent} className="h-1.5 flex-1" />
                             <span className="text-xs text-slate-400">{course.progress_percent}%</span>
