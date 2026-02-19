@@ -224,6 +224,10 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
     }
   }, [attempt, answers, submitting, resolvedParams.id]);
 
+  function isMultipleChoice(questionType: string): boolean {
+    return questionType === 'multiple' || questionType === 'multiple_choice';
+  }
+
   function handleAnswerSelect(questionId: string, optionIndex: number, isMultiple: boolean) {
     setAnswers(prev => {
       const current = prev[questionId] || [];
@@ -404,7 +408,7 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
           <CardHeader>
             <div className="flex items-center gap-2 mb-2">
               <Badge variant="outline">
-                {question.question_type === 'multiple' ? 'Select all that apply' : 'Select one'}
+                {isMultipleChoice(question.question_type) ? 'Select all that apply' : 'Select one'}
               </Badge>
               <span className="text-sm text-muted-foreground">{question.points} points</span>
             </div>
@@ -417,7 +421,7 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
                 return (
                   <button
                     key={idx}
-                    onClick={() => handleAnswerSelect(question.id, idx, question.question_type === 'multiple')}
+                    onClick={() => handleAnswerSelect(question.id, idx, isMultipleChoice(question.question_type))}
                     className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
                       isSelected
                         ? 'border-primary bg-primary/10'
@@ -425,10 +429,10 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                      <div className={`w-6 h-6 ${isMultipleChoice(question.question_type) ? 'rounded' : 'rounded-full'} border-2 flex items-center justify-center ${
                         isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground'
                       }`}>
-                        {isSelected && (question.question_type === 'multiple' ? '✓' : '●')}
+                        {isSelected && (isMultipleChoice(question.question_type) ? '✓' : '●')}
                       </div>
                       <span>{option}</span>
                     </div>
