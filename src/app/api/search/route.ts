@@ -164,7 +164,7 @@ Keep the answer concise but well-organized. Output ONLY the HTML content, no JSO
           try {
             // Stream the AI answer
             const streamResponse = anthropic.messages.stream({
-              model: 'claude-sonnet-4-20250514',
+              model: 'claude-sonnet-4-6',
               max_tokens: 1024,
               messages: [{ role: 'user', content: systemPrompt }]
             });
@@ -205,7 +205,7 @@ Keep the answer concise but well-organized. Output ONLY the HTML content, no JSO
 
     // Non-streaming fallback
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1024,
       messages: [{ role: 'user', content: systemPrompt }]
     });
