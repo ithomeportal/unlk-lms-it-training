@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { canViewAdmin, hasFullUserVisibility } from '@/lib/permissions';
+import { excludeSystemAccountsSql } from '@/lib/system-accounts';
 import { query } from '@/lib/db';
 
 export interface UserAnalytics {
@@ -134,6 +135,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN quiz_stats qs ON qs.user_id = u.id
       WHERE
         (${seesEveryone ? 'TRUE' : `u.role != 'super_admin'`} OR u.id = $1)
+        AND ${excludeSystemAccountsSql('u.email')}
       ${search ? `AND (u.email ILIKE $2 OR u.name ILIKE $2)` : ''}
       ORDER BY
         CASE WHEN $${search ? '3' : '2'} = 'last_login_at' AND $${search ? '4' : '3'} = 'desc' THEN u.last_login_at END DESC NULLS LAST,

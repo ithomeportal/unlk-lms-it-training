@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { canExportData } from '@/lib/permissions';
+import { excludeSystemAccountsSql } from '@/lib/system-accounts';
 import { query } from '@/lib/db';
 
 interface ExportRow {
@@ -115,6 +116,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN enrollment_stats es ON es.user_id = u.id
       LEFT JOIN progress_stats ps ON ps.user_id = u.id
       LEFT JOIN quiz_stats qs ON qs.user_id = u.id
+      WHERE ${excludeSystemAccountsSql('u.email')}
       ORDER BY u.created_at DESC
     `);
 

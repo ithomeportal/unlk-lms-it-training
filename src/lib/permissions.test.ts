@@ -12,6 +12,7 @@ import {
   roleBadgeClass,
   roleLabel,
 } from './permissions';
+import { excludeSystemAccountsSql, systemAccountEmails } from './system-accounts';
 
 function asUser(role: Role): User {
   return {
@@ -143,5 +144,29 @@ describe('role presentation', () => {
   it('gives every role a badge class', () => {
     for (const role of ROLES) expect(roleBadgeClass(role)).toMatch(/border-/);
     expect(roleBadgeClass('root')).toBe(roleBadgeClass('learner'));
+  });
+});
+
+// --- system account exclusion (see system-accounts.ts) ---
+
+describe('system account exclusion', () => {
+  it('excludes the health monitor by default', () => {
+    expect(systemAccountEmails()).toContain('monitor@unilinkportal.com');
+  });
+
+  it('builds a predicate against the given column', () => {
+    expect(excludeSystemAccountsSql('u.email'))
+      .toBe("lower(u.email) NOT IN ('monitor@unilinkportal.com')");
+  });
+
+  it('refuses to interpolate a malformed address', () => {
+    const prev = process.env.HEALTH_MONITOR_EMAIL;
+    process.env.HEALTH_MONITOR_EMAIL = "x'; DROP TABLE users; --";
+    try {
+      expect(() => excludeSystemAccountsSql('u.email')).toThrow(/malformed/);
+    } finally {
+      if (prev === undefined) delete process.env.HEALTH_MONITOR_EMAIL;
+      else process.env.HEALTH_MONITOR_EMAIL = prev;
+    }
   });
 });

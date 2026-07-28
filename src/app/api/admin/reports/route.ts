@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { canViewAdmin } from '@/lib/permissions';
+import { excludeSystemAccountsSql } from '@/lib/system-accounts';
 import { query, queryOne } from '@/lib/db';
 
 export async function GET() {
@@ -17,6 +18,7 @@ export async function GET() {
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE is_active = true) as active
       FROM users
+      WHERE ${excludeSystemAccountsSql('email')}
     `);
 
     // Get course stats
