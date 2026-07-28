@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import DOMPurify from 'isomorphic-dompurify';
 import { Course, Lesson, LessonAttachment, LessonProgress } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -12,15 +12,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 
-// Sanitize HTML to prevent XSS attacks
-function sanitizeHtml(html: string | null): string {
-  if (!html) return '';
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'ul', 'ol', 'li', 'strong', 'em', 'a', 'code', 'pre', 'blockquote', 'img', 'div', 'span', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
-    ALLOWED_ATTR: ['href', 'src', 'alt', 'class', 'target', 'rel', 'title'],
-    ALLOW_DATA_ATTR: false,
-  });
-}
+// Browser-only: keeps isomorphic-dompurify (and jsdom) out of the server
+// bundle. See sanitized-html.tsx for why.
+const SanitizedHtml = dynamic(() => import('./sanitized-html'), { ssr: false });
 
 
 interface LessonWithDetails extends Omit<Lesson, 'progress' | 'attachments'> {
@@ -364,7 +358,7 @@ export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex
 
             {/* Text Content - Magazine Layout */}
             {(currentLesson.content_type === 'text' || currentLesson.content_type === 'mixed') && currentLesson.text_content && (
-              <div
+              <SanitizedHtml
                 className="mb-6 lesson-content text-slate-300 leading-relaxed
                   [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-8 [&_h2]:mb-4 [&_h2]:p-4 [&_h2]:bg-gradient-to-r [&_h2]:from-blue-600/20 [&_h2]:to-purple-600/20 [&_h2]:rounded-xl [&_h2]:border [&_h2]:border-blue-500/20
                   [&_h2:first-child]:mt-0
@@ -415,13 +409,13 @@ export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex
                   [&_.badge-blue]:bg-blue-900/50 [&_.badge-blue]:text-blue-300
                   [&_.badge-green]:bg-emerald-900/50 [&_.badge-green]:text-emerald-300
                   [&_.badge-purple]:bg-purple-900/50 [&_.badge-purple]:text-purple-300"
-                dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentLesson.text_content) }}
+                html={currentLesson.text_content}
               />
             )}
 
             {/* Description - Magazine Layout */}
             {currentLesson.description && (
-              <div
+              <SanitizedHtml
                 className="mb-6 lesson-content text-slate-300 leading-relaxed
                   [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-8 [&_h2]:mb-4 [&_h2]:p-4 [&_h2]:bg-gradient-to-r [&_h2]:from-blue-600/20 [&_h2]:to-purple-600/20 [&_h2]:rounded-xl [&_h2]:border [&_h2]:border-blue-500/20
                   [&_h2:first-child]:mt-0
@@ -455,7 +449,7 @@ export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex
                   [&_.figure-caption]:text-sm [&_.figure-caption]:text-slate-400 [&_.figure-caption]:mt-3 [&_.figure-caption]:italic
 
                   [&_.highlight-box]:bg-gradient-to-r [&_.highlight-box]:from-blue-600/10 [&_.highlight-box]:to-purple-600/10 [&_.highlight-box]:p-5 [&_.highlight-box]:rounded-xl [&_.highlight-box]:border [&_.highlight-box]:border-blue-500/30 [&_.highlight-box]:my-6"
-                dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentLesson.description) }}
+                html={currentLesson.description}
               />
             )}
 
