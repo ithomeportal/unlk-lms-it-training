@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
+import { User } from '@/lib/types';
+import { canExportData, roleBadgeClass, roleLabel } from '@/lib/permissions';
 
 interface UserAnalytics {
   id: string;
@@ -42,7 +44,7 @@ export default function AdminAnalyticsPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [currentUser, setCurrentUser] = useState<{ role: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
@@ -51,14 +53,14 @@ export default function AdminAnalyticsPage() {
   }, []);
 
   const loadCurrentUser = async () => {
-    // We'll infer from the export button behavior
     try {
-      const res = await fetch('/api/admin/analytics/export?format=json');
+      const res = await fetch('/api/profile');
       if (res.ok) {
-        setCurrentUser({ role: 'super_admin' });
+        const data = await res.json();
+        setCurrentUser(data.user ?? null);
       }
     } catch {
-      // Not super admin
+      setCurrentUser(null);
     }
   };
 
@@ -153,7 +155,7 @@ export default function AdminAnalyticsPage() {
               className="bg-slate-800/50 border-slate-700 text-white"
             />
           </div>
-          {currentUser?.role === 'super_admin' && (
+          {canExportData(currentUser) && (
             <Button
               onClick={handleExport}
               disabled={exporting}
@@ -246,13 +248,9 @@ export default function AdminAnalyticsPage() {
                           {user.role !== 'learner' && (
                             <Badge
                               variant="outline"
-                              className={`text-xs ${
-                                user.role === 'super_admin'
-                                  ? 'border-red-500 text-red-400'
-                                  : 'border-purple-500 text-purple-400'
-                              }`}
+                              className={`text-xs ${roleBadgeClass(user.role)}`}
                             >
-                              {user.role}
+                              {roleLabel(user.role)}
                             </Badge>
                           )}
                         </div>

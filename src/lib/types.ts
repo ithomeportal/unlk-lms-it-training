@@ -3,7 +3,7 @@ export interface User {
   email: string;
   name: string | null;
   avatar_url: string | null;
-  role: 'super_admin' | 'admin' | 'instructor' | 'learner';
+  role: 'super_admin' | 'admin' | 'auditor' | 'instructor' | 'learner';
   is_active: boolean;
   last_login_at: string | null;
   created_at: string;

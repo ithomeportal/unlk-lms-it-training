@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
+import { canManage } from '@/lib/permissions';
 import { query } from '@/lib/db';
 
 interface RouteParams {
@@ -9,7 +10,7 @@ interface RouteParams {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await getCurrentUser();
-    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+    if (!canManage(user)) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -72,7 +73,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await getCurrentUser();
-    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+    if (!canManage(user)) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

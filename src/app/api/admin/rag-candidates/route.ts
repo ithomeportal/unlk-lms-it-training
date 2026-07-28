@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
+import { canViewAdmin } from '@/lib/permissions';
 import { query } from '@/lib/db';
 
 interface RAGCandidate {
@@ -14,7 +15,7 @@ interface RAGCandidate {
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
-    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+    if (!canViewAdmin(user)) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

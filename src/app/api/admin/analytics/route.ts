@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser, isAdmin } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';
+import { canViewAdmin, hasFullUserVisibility } from '@/lib/permissions';
 import { query } from '@/lib/db';
 
 export interface UserAnalytics {
@@ -51,9 +52,13 @@ export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
 
-    if (!user || !isAdmin(user)) {
+    if (!canViewAdmin(user)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // Auditors and super_admins see every user's activity. Plain admins have
+    // other super_admins filtered out (they still always see themselves).
+    const seesEveryone = hasFullUserVisibility(user);
 
     // Get search/filter params
     const { searchParams } = new URL(request.url);
@@ -128,7 +133,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN progress_stats ps ON ps.user_id = u.id
       LEFT JOIN quiz_stats qs ON qs.user_id = u.id
       WHERE
-        u.role != 'super_admin' OR u.id = $1
+        (${seesEveryone ? 'TRUE' : `u.role != 'super_admin'`} OR u.id = $1)
       ${search ? `AND (u.email ILIKE $2 OR u.name ILIKE $2)` : ''}
       ORDER BY
         CASE WHEN $${search ? '3' : '2'} = 'last_login_at' AND $${search ? '4' : '3'} = 'desc' THEN u.last_login_at END DESC NULLS LAST,

@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { User } from '@/lib/types';
+import { canManage, canViewAdmin } from '@/lib/permissions';
 
 interface NavItem {
   title: string;
@@ -55,14 +56,19 @@ const mainNav: NavItem[] = [
   },
 ];
 
-const adminNav = [
+// Read-only oversight — visible to auditors as well as admins.
+const auditNav: NavItem[] = [
+  { title: 'User Analytics', url: '/admin/analytics', icon: AnalyticsIcon },
+  { title: 'Reports', url: '/admin/reports', icon: ChartIcon },
+  { title: 'Manage Users', url: '/admin/users', icon: UsersIcon },
+];
+
+// Content management — requires write permissions (canManage).
+const manageNav: NavItem[] = [
   { title: 'Manage Courses', url: '/admin/courses', icon: SettingsIcon },
   { title: 'Quizzes', url: '/admin/quizzes', icon: QuizIcon },
-  { title: 'Manage Users', url: '/admin/users', icon: UsersIcon },
   { title: 'Categories', url: '/admin/categories', icon: FolderIcon },
   { title: 'RAG Review', url: '/admin/rag-review', icon: BrainIcon },
-  { title: 'Reports', url: '/admin/reports', icon: ChartIcon },
-  { title: 'User Analytics', url: '/admin/analytics', icon: AnalyticsIcon },
 ];
 
 function HomeIcon() {
@@ -152,7 +158,8 @@ interface AppSidebarProps {
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname();
-  const isAdmin = user.role === 'super_admin' || user.role === 'admin';
+  const showAudit = canViewAdmin(user);
+  const showManage = canManage(user);
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -240,12 +247,36 @@ export function AppSidebar({ user }: AppSidebarProps) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {isAdmin && (
+        {showAudit && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-slate-400">Oversight</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {auditNav.map((item) => (
+                  <SidebarMenuItem key={item.url}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname.startsWith(item.url)}
+                      className="hover:bg-slate-700/50"
+                    >
+                      <Link href={item.url}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {showManage && (
           <SidebarGroup>
             <SidebarGroupLabel className="text-slate-400">Administration</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {adminNav.map((item) => (
+                {manageNav.map((item) => (
                   <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton
                       asChild

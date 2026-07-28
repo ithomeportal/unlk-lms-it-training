@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
-import { getCurrentUser, isAdmin } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';
+import { canViewAdmin } from '@/lib/permissions';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/app-sidebar';
 import { Separator } from '@/components/ui/separator';
@@ -15,7 +16,10 @@ export default async function AdminLayout({
     redirect('/login');
   }
 
-  if (!isAdmin(user)) {
+  // Read access to the admin panel. Management sections (courses, categories,
+  // quizzes, rag-review) each have their own `canManage` layout guard so that
+  // read-only roles such as auditor cannot reach them by URL.
+  if (!canViewAdmin(user)) {
     redirect('/dashboard');
   }
 

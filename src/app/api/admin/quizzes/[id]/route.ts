@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser, isAdmin } from '@/lib/auth';
+import { canViewAdmin } from '@/lib/permissions';
 import { query, queryOne } from '@/lib/db';
 
 export async function GET(
@@ -8,7 +9,7 @@ export async function GET(
 ) {
   try {
     const user = await getCurrentUser();
-    if (!user || !isAdmin(user)) {
+    if (!canViewAdmin(user)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

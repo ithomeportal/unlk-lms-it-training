@@ -8,7 +8,9 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) UNIQUE NOT NULL,
     name VARCHAR(255),
     avatar_url TEXT,
-    role VARCHAR(50) DEFAULT 'learner' CHECK (role IN ('super_admin', 'admin', 'instructor', 'learner')),
+    -- 'auditor' = read-only oversight (all user activity + export), no write
+    -- permissions. See src/lib/permissions.ts for the authoritative policy.
+    role VARCHAR(50) DEFAULT 'learner' CHECK (role IN ('super_admin', 'admin', 'auditor', 'instructor', 'learner')),
     is_active BOOLEAN DEFAULT true,
     last_login_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

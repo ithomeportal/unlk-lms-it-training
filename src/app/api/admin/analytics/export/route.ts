@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser, isSuperAdmin } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';
+import { canExportData } from '@/lib/permissions';
 import { query } from '@/lib/db';
 
 interface ExportRow {
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
     const user = await getCurrentUser();
 
     // Only super_admin can export
-    if (!user || !isSuperAdmin(user)) {
+    if (!canExportData(user)) {
       return NextResponse.json({ error: 'Unauthorized - Super Admin access required' }, { status: 401 });
     }
 

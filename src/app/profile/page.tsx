@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { roleBadgeClass, roleLabel } from '@/lib/permissions';
 import { getCurrentUser } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -137,8 +138,8 @@ export default async function ProfilePage() {
                         </h2>
                         <p className="text-slate-400">{user.email}</p>
                         <div className="flex items-center gap-2 mt-2">
-                          <Badge variant="outline" className="border-slate-600 text-slate-300">
-                            {user.role === 'admin' ? 'Administrator' : 'Learner'}
+                          <Badge variant="outline" className={roleBadgeClass(user.role)}>
+                            {roleLabel(user.role)}
                           </Badge>
                           <span className="text-sm text-slate-500">
                             Member since {formatDate(user.created_at)}

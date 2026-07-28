@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, use } from 'react';
+import { roleBadgeClass, roleLabel } from '@/lib/permissions';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -212,17 +213,8 @@ export default function UserAnalyticsDetailPage({
                 <h1 className="text-2xl font-bold text-white">
                   {user.name || user.email.split('@')[0]}
                 </h1>
-                <Badge
-                  variant="outline"
-                  className={`${
-                    user.role === 'super_admin'
-                      ? 'border-red-500 text-red-400'
-                      : user.role === 'admin'
-                      ? 'border-purple-500 text-purple-400'
-                      : 'border-slate-600 text-slate-400'
-                  }`}
-                >
-                  {user.role}
+                <Badge variant="outline" className={roleBadgeClass(user.role)}>
+                  {roleLabel(user.role)}
                 </Badge>
                 {!user.is_active && (
                   <Badge variant="outline" className="border-red-500 text-red-400">

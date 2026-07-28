@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { randomInt } from 'crypto';
 import { queryOne, execute } from './db';
 import { User, Session } from './types';
+import { canManage, isSuperAdmin as isSuperAdminPolicy } from './permissions';
 import { v4 as uuidv4 } from 'uuid';
 import { Resend } from 'resend';
 
@@ -265,12 +266,17 @@ export async function logout(): Promise<void> {
   cookieStore.delete(SESSION_COOKIE_NAME);
 }
 
-// Check if user has admin access
+// Authorization policy lives in @/lib/permissions — these are back-compat
+// delegates so existing call sites keep working with a single source of truth.
+
+/**
+ * WRITE gate: can this user mutate admin-managed content?
+ * Alias of `canManage`. An auditor is deliberately NOT an admin.
+ */
 export function isAdmin(user: User | null): boolean {
-  return user?.role === 'super_admin' || user?.role === 'admin';
+  return canManage(user);
 }
 
-// Check if user is super admin
 export function isSuperAdmin(user: User | null): boolean {
-  return user?.role === 'super_admin';
+  return isSuperAdminPolicy(user);
 }
