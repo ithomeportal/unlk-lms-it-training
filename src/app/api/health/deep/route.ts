@@ -136,7 +136,11 @@ export async function GET(request: NextRequest) {
 
     checks = [
       await runCheck('login', '/login', null, 'Unilink'),
-      await runCheck('dashboard', '/dashboard', cookie, null),
+      // AppSidebar renders the signed-in user's email, so its presence proves
+      // the page rendered AND that the session resolved — a marker of null
+      // would let a 200-with-an-error-boundary pass, which is the whole point
+      // of this check.
+      await runCheck('dashboard', '/dashboard', cookie, MONITOR_EMAIL),
       await runCheck('catalog', '/courses', cookie, course?.title ?? null),
       // The page that was silently broken. Assert the title actually renders.
       await runCheck(
