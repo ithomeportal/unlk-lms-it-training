@@ -13,6 +13,13 @@ function slugify(text: string): string {
 
 export async function GET() {
   try {
+    // Management-only read: every caller is an admin UI behind a canManage
+    // layout, and this returns unpublished drafts. Was unauthenticated.
+    const user = await getCurrentUser();
+    if (!user || !isAdmin(user)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const courses = await query(`
       SELECT c.*, cat.name as category_name
       FROM courses c

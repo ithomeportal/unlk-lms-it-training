@@ -13,6 +13,11 @@ function slugify(text: string): string {
 
 export async function GET() {
   try {
+    const user = await getCurrentUser();
+    if (!user || !isAdmin(user)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const categories = await query(`
       SELECT * FROM categories ORDER BY sort_order, name
     `);

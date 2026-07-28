@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import DOMPurify from 'isomorphic-dompurify';
@@ -48,11 +48,30 @@ interface CourseViewerProps {
   currentLessonIndex: number;
   userId: string;
   quizInfo: QuizInfo | null;
+  isEnrolled: boolean;
 }
 
-export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex, quizInfo }: CourseViewerProps) {
+export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex, quizInfo, isEnrolled }: CourseViewerProps) {
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+
+  // Enrol on open. This used to happen inside the page's server render, where
+  // a Next.js route prefetch could trigger it for a user who never opened the
+  // course. Doing it here keeps the GET side-effect-free; the endpoint is
+  // idempotent, so a repeat mount is harmless.
+  useEffect(() => {
+    if (isEnrolled) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/courses/${course.id}/enroll`, { method: 'POST' });
+        if (res.ok && !cancelled) router.refresh();
+      } catch (error) {
+        console.error('Failed to enroll:', error);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isEnrolled, course.id, router]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const currentLesson = lessons[currentIndex];

@@ -1,6 +1,6 @@
 import { redirect, notFound } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
-import { query, queryOne, execute } from '@/lib/db';
+import { query, queryOne } from '@/lib/db';
 import { Course, Lesson, LessonAttachment, LessonProgress } from '@/lib/types';
 import { CourseViewer } from './course-viewer';
 import { LockedCourseView } from './locked-view';
@@ -103,17 +103,12 @@ async function getQuizInfo(courseId: string, userId: string): Promise<QuizInfo |
   };
 }
 
-async function ensureEnrollment(userId: string, courseId: string) {
+async function isEnrolled(userId: string, courseId: string): Promise<boolean> {
   const enrollment = await queryOne<{ id: string }>(`
     SELECT id FROM enrollments WHERE user_id = $1 AND course_id = $2
   `, [userId, courseId]);
 
-  if (!enrollment) {
-    await execute(`
-      INSERT INTO enrollments (user_id, course_id)
-      VALUES ($1, $2)
-    `, [userId, courseId]);
-  }
+  return !!enrollment;
 }
 
 export default async function CourseViewerPage({
@@ -151,7 +146,11 @@ export default async function CourseViewerPage({
     );
   }
 
-  await ensureEnrollment(user.id, course.id);
+  // Enrolment is NOT written here: this is a GET render, and Next.js may
+  // execute it on a route prefetch, which would enrol a user who merely
+  // hovered a course card. CourseViewer POSTs to /api/courses/[id]/enroll on
+  // mount instead. See docs/SPEC-ROLES.md.
+  const enrolled = await isEnrolled(user.id, course.id);
 
   const lessons = await getLessons(course.id, user.id);
   const quizInfo = await getQuizInfo(course.id, user.id);
@@ -178,6 +177,7 @@ export default async function CourseViewerPage({
       currentLessonIndex={currentLessonIndex}
       userId={user.id}
       quizInfo={quizInfo}
+      isEnrolled={enrolled}
     />
   );
 }
