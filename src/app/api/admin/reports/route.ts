@@ -7,7 +7,7 @@ export async function GET() {
   try {
     const user = await getCurrentUser();
 
-    if (!canViewAdmin(user)) {
+    if (!user || !canViewAdmin(user)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

@@ -33,12 +33,31 @@ const files = walk(API_ROOT).sort();
 const rows = [];
 const violations = [];
 
+const ungated = [];
+const opaque = [];
+
 for (const file of files) {
   const src = readFileSync(file, 'utf8');
   // Split the file into per-handler segments so a gate is attributed to the
   // handler it actually sits in, not merely to the file.
-  const marker = /export\s+async\s+function\s+(GET|POST|PUT|PATCH|DELETE)\b/g;
+  const marker = /export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)\b/g;
   const hits = [...src.matchAll(marker)];
+
+  if (!hits.length) {
+    // e.g. `export const { GET, POST } = createRouteHandler(...)` (uploadthing).
+    // This script cannot see where such handlers are gated, so it must SAY SO
+    // rather than silently contribute zero rows and inflate the "PASS".
+    const destructured = src.match(/export\s+const\s*\{([^}]*)\}/);
+    const methods = destructured
+      ? destructured[1].split(',').map((s) => s.trim()).filter((m) => /^(GET|POST|PUT|PATCH|DELETE)$/.test(m))
+      : [];
+    opaque.push(
+      `${file}: handlers not declared as \`export function\`` +
+        (methods.length ? ` (exports ${methods.join('/')} indirectly)` : '') +
+        ' — gate must be verified by hand'
+    );
+    continue;
+  }
 
   for (let i = 0; i < hits.length; i++) {
     const method = hits[i][1];
@@ -59,6 +78,13 @@ for (const file of files) {
         `${file}: ${method} is guarded only by read-only gate(s): ${readGates.join(', ')}`
       );
     }
+
+    // A handler with NO gate at all is not automatically wrong — several
+    // writes are legitimately available to any signed-in user — but it must
+    // be surfaced, not silently counted as passing.
+    if (WRITE_METHODS.has(method) && !gates.length) {
+      ungated.push(`${file}: ${method} has no role gate (session-only or unauthenticated?)`);
+    }
   }
 }
 
@@ -67,11 +93,21 @@ for (const r of rows) {
   console.log(`${r.route.padEnd(width)}  ${r.method.padEnd(6)}  ${r.gates}`);
 }
 
-console.log(`\n${rows.length} handlers across ${files.length} route files.`);
+console.log(`\n${rows.length} handlers parsed across ${files.length} route files.`);
+
+if (opaque.length) {
+  console.log('\nNOT INSPECTED — verify these by hand:');
+  for (const o of opaque) console.log('  ' + o);
+}
+
+if (ungated.length) {
+  console.log(`\nWRITE handlers with no role gate (${ungated.length}) — review, not necessarily wrong:`);
+  for (const u of ungated) console.log('  ' + u);
+}
 
 if (violations.length) {
   console.error('\nFAIL — write handler(s) using a read-only gate:');
   for (const v of violations) console.error('  ' + v);
   process.exit(1);
 }
-console.log('PASS — no write handler is guarded by a read-only gate.');
+console.log("PASS — no write handler is guarded by a read-only gate (see caveats above).");

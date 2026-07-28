@@ -10,7 +10,7 @@ interface RouteParams {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await getCurrentUser();
-    if (!canManage(user)) {
+    if (!user || !canManage(user)) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -73,7 +73,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await getCurrentUser();
-    if (!canManage(user)) {
+    if (!user || !canManage(user)) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser, isAdmin } from '@/lib/auth';
-import { canViewAdmin } from '@/lib/permissions';
 import { query, queryOne } from '@/lib/db';
 
 export async function GET(
@@ -9,7 +8,11 @@ export async function GET(
 ) {
   try {
     const user = await getCurrentUser();
-    if (!canViewAdmin(user)) {
+    // WRITE-level gate on a read: `SELECT *` returns `correct_answer`, the
+    // answer key. The learner endpoint deliberately withholds it, and an
+    // auditor with it could forge a perfect score in the very quiz_attempts
+    // data the audit role exists to attest to. Do not widen this.
+    if (!user || !isAdmin(user)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

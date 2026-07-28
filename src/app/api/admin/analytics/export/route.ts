@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     const user = await getCurrentUser();
 
     // Only super_admin can export
-    if (!canExportData(user)) {
+    if (!user || !canExportData(user)) {
       return NextResponse.json({ error: 'Unauthorized - Super Admin access required' }, { status: 401 });
     }
 

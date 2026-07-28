@@ -37,10 +37,15 @@ const EXPORT_ROLES: readonly Role[] = ['super_admin', 'auditor'] as const;
 /** Roles whose oversight is unrestricted — they see every user's rows, including super_admins. */
 const FULL_VISIBILITY_ROLES: readonly Role[] = ['super_admin', 'auditor'] as const;
 
-// These are type predicates so that `if (!canViewAdmin(user)) return 401;`
-// narrows `user` to a non-null User in the code that follows — the same
-// narrowing the old `!user || !isAdmin(user)` form provided.
-function hasRole(user: User | null | undefined, roles: readonly Role[]): user is User {
+// These deliberately return `boolean`, NOT a `user is User` type predicate.
+// A predicate is sound in the positive branch but LIES in the negative one:
+// `if (!canManage(u))` would narrow `u` to `null`, when in reality it may be a
+// perfectly non-null auditor. Worse, `canViewAdmin(u) && !canManage(u)` — the
+// exact condition you write to render read-only UI — narrows `u` to `never`,
+// which pushes you toward an unsound `as User` cast.
+// Call sites therefore keep the codebase's existing `!user || !gate(user)`
+// idiom, which narrows correctly and needs no cast.
+function hasRole(user: User | null | undefined, roles: readonly Role[]): boolean {
   return !!user && roles.includes(user.role as Role);
 }
 
@@ -48,20 +53,24 @@ function hasRole(user: User | null | undefined, roles: readonly Role[]): user is
  * WRITE gate. Guard EVERY POST / PUT / PATCH / DELETE handler and every
  * management page with this. An auditor must never pass it.
  */
-export function canManage(user: User | null | undefined): user is User {
+export function canManage(user: User | null | undefined): boolean {
   return hasRole(user, MANAGE_ROLES);
 }
 
 /**
  * READ gate for the admin panel. Guard admin GET handlers and read-only
- * admin pages with this. NEVER use it on a mutating handler.
+ * admin pages with this.
+ *
+ * NEVER use it on a mutating handler, and never on a read that returns data a
+ * lesser role must not see — `/api/admin/quizzes/[id]/questions` returns the
+ * quiz answer key and is deliberately `canManage`, not this.
  */
-export function canViewAdmin(user: User | null | undefined): user is User {
+export function canViewAdmin(user: User | null | undefined): boolean {
   return hasRole(user, VIEW_ADMIN_ROLES);
 }
 
 /** Bulk export of user-activity data (CSV/JSON). Read-only by nature. */
-export function canExportData(user: User | null | undefined): user is User {
+export function canExportData(user: User | null | undefined): boolean {
   return hasRole(user, EXPORT_ROLES);
 }
 
@@ -70,15 +79,15 @@ export function canExportData(user: User | null | undefined): user is User {
  * other super_admins filtered out of analytics; auditors and super_admins do
  * not, because partial visibility would defeat the point of an audit role.
  */
-export function hasFullUserVisibility(user: User | null | undefined): user is User {
+export function hasFullUserVisibility(user: User | null | undefined): boolean {
   return hasRole(user, FULL_VISIBILITY_ROLES);
 }
 
-export function isSuperAdmin(user: User | null | undefined): user is User {
+export function isSuperAdmin(user: User | null | undefined): boolean {
   return user?.role === 'super_admin';
 }
 
-export function isAuditor(user: User | null | undefined): user is User {
+export function isAuditor(user: User | null | undefined): boolean {
   return user?.role === 'auditor';
 }
 
@@ -90,9 +99,14 @@ const ROLE_LABELS: Record<Role, string> = {
   learner: 'Learner',
 };
 
-/** Human-readable role name. Falls back to the raw value for unknown roles. */
+/**
+ * Human-readable role name. An unrecognised role is shown VERBATIM rather than
+ * mapped to a friendly name: in an oversight UI, rendering an unknown role as
+ * "Learner" would disguise it as the least privileged one.
+ */
 export function roleLabel(role: string | null | undefined): string {
-  return ROLE_LABELS[role as Role] ?? 'Learner';
+  if (!role) return ROLE_LABELS.learner;
+  return ROLE_LABELS[role as Role] ?? role;
 }
 
 const ROLE_BADGE_CLASSES: Record<Role, string> = {

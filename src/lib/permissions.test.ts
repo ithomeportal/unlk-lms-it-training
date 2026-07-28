@@ -96,6 +96,18 @@ describe('auditor is strictly read-only', () => {
   });
 });
 
+describe('gates return plain booleans, not type predicates', () => {
+  // A `user is User` predicate narrows the NEGATIVE branch to `null`/`never`,
+  // which is false for a wrong-role user and pushes callers toward `as User`.
+  it('a denied non-null user is still a usable object', () => {
+    const auditor = asUser('auditor');
+    expect(canManage(auditor)).toBe(false);
+    // If canManage were a predicate this branch would type `auditor` as null.
+    expect(canViewAdmin(auditor) && !canManage(auditor)).toBe(true);
+    expect(auditor.email).toContain('@');
+  });
+});
+
 describe('null / unknown input is denied', () => {
   for (const gate of [canManage, canViewAdmin, canExportData, hasFullUserVisibility, isSuperAdmin, isAuditor]) {
     it(`${gate.name} denies null and undefined`, () => {
@@ -120,9 +132,12 @@ describe('role presentation', () => {
     expect(roleLabel('super_admin')).toBe('Super Administrator');
   });
 
-  it('falls back to Learner for unknown roles', () => {
-    expect(roleLabel('root')).toBe('Learner');
+  it('shows an unknown role verbatim rather than disguising it as Learner', () => {
+    // In an oversight UI, mapping an unrecognised role to the least
+    // privileged name would hide it. Show what is actually in the column.
+    expect(roleLabel('root')).toBe('root');
     expect(roleLabel(null)).toBe('Learner');
+    expect(roleLabel(undefined)).toBe('Learner');
   });
 
   it('gives every role a badge class', () => {
