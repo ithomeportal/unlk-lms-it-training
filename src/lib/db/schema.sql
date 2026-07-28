@@ -129,13 +129,19 @@ CREATE TABLE IF NOT EXISTS lesson_progress (
 );
 
 -- Content embeddings for RAG search
+-- NOTE (Jul 20, 2026): reconciled against the live database. Retrieval here is
+-- Postgres full-text search over `search_vector`, NOT pgvector similarity — the
+-- `embedding vector(1536)` column this file used to declare was never created
+-- and no code references it, so it has been removed rather than left as a
+-- phantom. Re-add it (plus a backfill) only if semantic search is actually built.
 CREATE TABLE IF NOT EXISTS content_embeddings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     lesson_id UUID REFERENCES lessons(id) ON DELETE CASCADE,
     content_chunk TEXT NOT NULL,
-    embedding vector(1536),
     chunk_index INTEGER DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    chunk_type VARCHAR(50) DEFAULT 'transcript',
+    search_vector TSVECTOR
 );
 
 -- Mandatory course assignments
@@ -152,15 +158,22 @@ CREATE TABLE IF NOT EXISTS mandatory_assignments (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Quiz structure (for future use)
+-- Quiz structure (in active use)
+-- A quiz hangs off EITHER a lesson or a whole course; both FKs are nullable.
 CREATE TABLE IF NOT EXISTS quizzes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     lesson_id UUID REFERENCES lessons(id) ON DELETE CASCADE,
     title VARCHAR(255),
     passing_score INTEGER DEFAULT 70,
     is_active BOOLEAN DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    course_id UUID REFERENCES courses(id) ON DELETE CASCADE,
+    time_limit_minutes INTEGER DEFAULT 45,
+    description TEXT,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_quizzes_course ON quizzes(course_id);
 
 CREATE TABLE IF NOT EXISTS quiz_questions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -170,8 +183,42 @@ CREATE TABLE IF NOT EXISTS quiz_questions (
     options JSONB,
     correct_answer JSONB,
     sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    points INTEGER DEFAULT 1
+);
+
+-- One row per user sitting a quiz. `integrity_warnings`/`integrity_flags` record
+-- proctoring signals (tab-switches etc.) captured by the quiz player.
+CREATE TABLE IF NOT EXISTS quiz_attempts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    quiz_id UUID REFERENCES quizzes(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    submitted_at TIMESTAMP WITH TIME ZONE,
+    score NUMERIC,
+    passed BOOLEAN,
+    time_spent_seconds INTEGER,
+    integrity_warnings INTEGER DEFAULT 0,
+    integrity_flags JSONB DEFAULT '[]'::jsonb,
+    status VARCHAR(20) DEFAULT 'in_progress',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_user ON quiz_attempts(user_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_quiz ON quiz_attempts(quiz_id);
+
+-- One row per answered question within an attempt.
+CREATE TABLE IF NOT EXISTS quiz_answers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    attempt_id UUID REFERENCES quiz_attempts(id) ON DELETE CASCADE,
+    question_id UUID REFERENCES quiz_questions(id) ON DELETE CASCADE,
+    selected_options JSONB NOT NULL,
+    is_correct BOOLEAN,
+    points_earned NUMERIC DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_quiz_answers_attempt ON quiz_answers(attempt_id);
 
 -- Search history for user archive
 CREATE TABLE IF NOT EXISTS search_history (
@@ -211,8 +258,12 @@ CREATE INDEX IF NOT EXISTS idx_login_history_logged_in ON login_history(logged_i
 CREATE INDEX IF NOT EXISTS idx_search_history_user ON search_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_search_history_user_date ON search_history(user_id, searched_at DESC);
 
--- Create vector index for similarity search
-CREATE INDEX IF NOT EXISTS idx_content_embeddings_vector ON content_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- Full-text search index over content_embeddings.search_vector.
+-- Replaces an ivfflat index on `embedding vector_cosine_ops` that this file used
+-- to declare: neither that index nor the `embedding` column exists in the live
+-- database, so running this schema verbatim failed with
+-- `column "embedding" does not exist`. Retrieval is full-text, not pgvector.
+CREATE INDEX IF NOT EXISTS idx_content_embeddings_search ON content_embeddings USING GIN(search_vector);
 
 -- Course prerequisites (many-to-many relationship)
 CREATE TABLE IF NOT EXISTS course_prerequisites (
