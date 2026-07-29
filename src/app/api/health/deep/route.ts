@@ -24,6 +24,14 @@ const MONITOR_EMAIL = (process.env.HEALTH_MONITOR_EMAIL || 'monitor@unilinkporta
 const ALERT_EMAIL = process.env.HEALTH_ALERT_EMAIL || 'ithome@unilinkportal.com';
 const ALERT_COOLDOWN_HOURS = 6;
 
+/**
+ * The course every employee is required to complete. It gets its own check
+ * rather than relying on the generic course-viewer canary, which only ever
+ * exercises the OLDEST published course — a break confined to this one would
+ * not have shown up there.
+ */
+const REQUIRED_COURSE_SLUG = 'corporate-it-security-awareness';
+
 interface CheckResult {
   name: string;
   path: string;
@@ -32,9 +40,21 @@ interface CheckResult {
   detail: string;
 }
 
-/** Compare ignoring case, whitespace and HTML entity escaping. */
+/**
+ * Compare ignoring case, whitespace and HTML entity escaping.
+ *
+ * Entities must be dropped BEFORE non-alphanumerics are stripped. Stripping
+ * first turns `&amp;` into the literal text `amp`, so a marker containing "&"
+ * could never match the rendered page: "Course Summary & Next Steps" normalises
+ * to `...summarynextsteps` while the HTML normalises to `...summaryampnextsteps`.
+ * That produced a check which failed every single run. It stayed hidden only
+ * because no marker had ever contained an ampersand.
+ */
 function normalize(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return s
+    .toLowerCase()
+    .replace(/&(?:[a-z]+|#x?[0-9a-f]+);/gi, ' ')
+    .replace(/[^a-z0-9]/g, '');
 }
 
 async function runCheck(
@@ -76,6 +96,36 @@ async function runCheck(
       status: null,
       detail: `request failed: ${e.code || ''} ${e.message || String(error)}`.trim(),
     };
+  }
+}
+
+/**
+ * The required course, plus the title of its LAST lesson.
+ *
+ * Asserting the last lesson rather than the course title is deliberate: the
+ * course title also appears in the catalog and in the page <title>, so it can
+ * render while the lesson list is empty or truncated. The last lesson only
+ * appears once the whole ordered list has loaded — and it is read from the
+ * database, so editing the content cannot silently invalidate the marker.
+ *
+ * Isolated in its own try: a failure here must degrade to one failed check,
+ * never take down the other four.
+ */
+async function loadRequiredCourse(): Promise<{ slug: string; lastLesson: string | null } | null> {
+  try {
+    const row = await queryOne<{ slug: string; last_lesson: string | null }>(
+      `SELECT c.slug,
+              (SELECT l.title FROM lessons l
+                WHERE l.course_id = c.id
+                ORDER BY l.sort_order DESC LIMIT 1) AS last_lesson
+         FROM courses c
+        WHERE c.slug = $1 AND c.is_published = true`,
+      [REQUIRED_COURSE_SLUG]
+    );
+    return row ? { slug: row.slug, lastLesson: row.last_lesson } : null;
+  } catch (error) {
+    console.error('Required-course lookup failed:', error);
+    return null;
   }
 }
 
@@ -151,6 +201,26 @@ export async function GET(request: NextRequest) {
       ),
       await runCheck('profile-api', '/api/profile', cookie, MONITOR_EMAIL),
     ];
+
+    // The mandatory course, checked by name. If it is missing or unpublished
+    // that is itself the alert — 21 people are required to complete it.
+    const required = await loadRequiredCourse();
+    checks.push(
+      required
+        ? await runCheck(
+            'required-course',
+            `/courses/${required.slug}`,
+            cookie,
+            required.lastLesson
+          )
+        : {
+            name: 'required-course',
+            path: `/courses/${REQUIRED_COURSE_SLUG}`,
+            ok: false,
+            status: null,
+            detail: 'required course is missing or not published',
+          }
+    );
   } catch (error) {
     console.error('Health check setup failed:', error);
     checks.push({
