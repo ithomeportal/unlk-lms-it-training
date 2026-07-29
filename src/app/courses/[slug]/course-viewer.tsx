@@ -12,6 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { LessonInteractives } from './lesson-interactives';
+import { useLessonHeartbeat } from '@/hooks/use-lesson-heartbeat';
 
 // Browser-only: keeps isomorphic-dompurify (and jsdom) out of the server
 // bundle. See sanitized-html.tsx for why.
@@ -70,14 +71,30 @@ export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const currentLesson = lessons[currentIndex];
-  const completedCount = lessons.filter(l => l.progress?.status === 'completed').length;
+
+  // Records real time-on-task against the open lesson. Until this shipped,
+  // lesson_progress.time_spent_seconds was never written by anything and every
+  // "time spent" figure in the product was a silent zero.
+  useLessonHeartbeat(currentLesson?.id, course.id);
+
+  // A lesson counts as complete when it HAS a completion timestamp, not merely
+  // when `status` says so. Revisiting a finished lesson used to rewrite status
+  // back to 'in_progress' (see markProgress below), leaving rows with
+  // completed_at set and status='in_progress' — which under-reported real
+  // completions here and in every report.
+  const isLessonComplete = (l: LessonWithDetails) =>
+    l.progress?.status === 'completed' || !!l.progress?.completed_at;
+  const completedCount = lessons.filter(isLessonComplete).length;
   const overallProgress = lessons.length > 0 ? Math.round((completedCount / lessons.length) * 100) : 0;
 
   const goToLesson = (index: number) => {
     setCurrentIndex(index);
     router.push(`/courses/${course.slug}?lesson=${index + 1}`, { scroll: false });
-    // Mark as in progress
-    markProgress(lessons[index].id, 'in_progress', 0);
+    // Opening a lesson marks it started. Never send 'in_progress' for a lesson
+    // that is already finished — that is what corrupted the rows above.
+    if (!isLessonComplete(lessons[index])) {
+      markProgress(lessons[index].id, 'in_progress', 0);
+    }
   };
 
   const goNext = () => {
@@ -174,8 +191,8 @@ export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex
           <div className="p-2">
             {lessons.map((lesson, index) => {
               const isActive = index === currentIndex;
-              const isCompleted = lesson.progress?.status === 'completed';
-              const isInProgress = lesson.progress?.status === 'in_progress';
+              const isCompleted = isLessonComplete(lesson);
+              const isInProgress = !isCompleted && lesson.progress?.status === 'in_progress';
 
               return (
                 <button
@@ -524,7 +541,7 @@ export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex
             {/* Mark Complete Button */}
             <div className="flex items-center justify-between">
               <div className="text-sm text-slate-400">
-                {currentLesson.progress?.status === 'completed' ? (
+                {isLessonComplete(currentLesson) ? (
                   <span className="flex items-center gap-2 text-green-400">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -535,7 +552,7 @@ export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex
                   'Mark this lesson as complete when you\'re done'
                 )}
               </div>
-              {currentLesson.progress?.status !== 'completed' && (
+              {!isLessonComplete(currentLesson) && (
                 <Button onClick={markComplete} className="bg-green-600 hover:bg-green-700">
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

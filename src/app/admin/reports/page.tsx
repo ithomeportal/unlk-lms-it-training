@@ -1,195 +1,214 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
+import { useCallback, useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import { canExportData } from '@/lib/permissions';
+import type { User } from '@/lib/types';
+import type {
+  ComplianceRow,
+  ComplianceSummary,
+  CourseRow,
+  CurvePoint,
+  KpiRow,
+  LearnerRow,
+  TrendPoint,
+} from '@/lib/reports/types';
+import { cn } from '@/lib/utils';
+import { SummaryTab } from './summary-tab';
+import { LearnersTab } from './learners-tab';
+import { CoursesTab } from './courses-tab';
+import { CurveTab } from './curve-tab';
+import { ComplianceTab } from './compliance-tab';
 
-interface ReportData {
-  totalUsers: number;
-  activeUsers: number;
-  totalCourses: number;
-  publishedCourses: number;
-  totalEnrollments: number;
-  completedEnrollments: number;
-  totalLessons: number;
-  lessonsCompleted: number;
-  courseStats: Array<{
-    id: string;
-    title: string;
-    enrollments: number;
-    completions: number;
-    completion_rate: number;
-  }>;
-  recentActivity: Array<{
-    user_email: string;
-    user_name: string | null;
-    course_title: string;
-    lesson_title: string;
-    status: string;
-    last_accessed_at: string;
-  }>;
+const TABS = [
+  { id: 'summary', label: 'Executive summary' },
+  { id: 'learners', label: 'Learners' },
+  { id: 'courses', label: 'Courses' },
+  { id: 'curve', label: 'Learning curve' },
+  { id: 'compliance', label: 'Compliance' },
+] as const;
+
+type TabId = (typeof TABS)[number]['id'];
+
+/** Which tabs a CSV export exists for. Summary and curve are charts, not tables. */
+const EXPORTABLE: Partial<Record<TabId, string>> = {
+  learners: 'learners',
+  courses: 'courses',
+  compliance: 'compliance',
+};
+
+interface ReportBundle {
+  kpis: KpiRow;
+  trend: TrendPoint[];
+  learners: LearnerRow[];
+  courses: CourseRow[];
+  compliance: { rows: ComplianceRow[]; summary: ComplianceSummary };
+  curve: CurvePoint[];
+}
+
+async function getJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  const body = await res.json();
+  if (!res.ok || !body.success) {
+    throw new Error(body.error || `Request failed: ${url}`);
+  }
+  return body.data as T;
 }
 
 export default function AdminReportsPage() {
-  const [data, setData] = useState<ReportData | null>(null);
+  const [tab, setTab] = useState<TabId>('summary');
+  const [data, setData] = useState<ReportBundle | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
-  useEffect(() => {
-    loadReports();
-  }, []);
-
-  const loadReports = async () => {
+  const load = useCallback(async (searchTerm: string) => {
+    setError(null);
     try {
-      const res = await fetch('/api/admin/reports');
-      const result = await res.json();
-      setData(result);
-    } catch {
-      console.error('Failed to load reports');
+      // All five requests in flight together. The previous implementation ran
+      // six queries in series inside one route.
+      const qs = searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : '';
+      const [summary, learners, courses, compliance, curve] = await Promise.all([
+        getJson<{ kpis: KpiRow; trend: TrendPoint[] }>('/api/admin/reports'),
+        getJson<{ learners: LearnerRow[] }>(`/api/admin/reports/learners${qs}`),
+        getJson<{ courses: CourseRow[] }>('/api/admin/reports/courses'),
+        getJson<{ rows: ComplianceRow[]; summary: ComplianceSummary }>('/api/admin/reports/compliance'),
+        getJson<{ points: CurvePoint[] }>('/api/admin/reports/curve'),
+      ]);
+
+      setData({
+        kpis: summary.kpis,
+        trend: summary.trend,
+        learners: learners.learners,
+        courses: courses.courses,
+        compliance,
+        curve: curve.points,
+      });
+    } catch (err) {
+      // Surfaced in the UI, not just swallowed to a spinner that never stops.
+      setError(err instanceof Error ? err.message : 'Failed to load reports');
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/profile')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setUser(d?.user ?? null))
+      .catch(() => setUser(null));
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => load(search), search ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [search, load]);
+
+  const exportView = EXPORTABLE[tab];
+
+  const handleExport = async () => {
+    if (!exportView) return;
+    setExporting(true);
+    try {
+      const qs = tab === 'learners' && search ? `&search=${encodeURIComponent(search)}` : '';
+      const res = await fetch(`/api/admin/reports/export?view=${exportView}${qs}`);
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lms-${exportView}-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('Export failed — this requires Super Admin or Auditor access.');
+    } finally {
+      setExporting(false);
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className="text-center py-12 text-slate-400">
-        Failed to load reports
-      </div>
-    );
-  }
-
-  const overallCompletionRate = data.totalEnrollments > 0
-    ? Math.round((data.completedEnrollments / data.totalEnrollments) * 100)
-    : 0;
-
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Reports & Analytics</h1>
-        <p className="text-slate-400">Overview of platform usage and engagement</p>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Reports</h1>
+          <p className="mt-1 text-slate-400">
+            Course completion, time invested and progress across every learner.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {tab === 'learners' && (
+            <Input
+              placeholder="Search learners..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-56 bg-slate-800/50 border-slate-700"
+            />
+          )}
+          {exportView && canExportData(user) && (
+            <Button
+              variant="outline"
+              onClick={handleExport}
+              disabled={exporting}
+              className="border-slate-600 text-slate-300"
+            >
+              {exporting ? 'Exporting...' : 'Export CSV'}
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Overview Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card className="bg-slate-800/50 border-slate-700">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">Total Users</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">{data.totalUsers}</div>
-            <p className="text-xs text-slate-500">{data.activeUsers} active</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-slate-800/50 border-slate-700">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">Courses</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">{data.totalCourses}</div>
-            <p className="text-xs text-slate-500">{data.publishedCourses} published</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-slate-800/50 border-slate-700">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">Enrollments</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">{data.totalEnrollments}</div>
-            <p className="text-xs text-slate-500">{data.completedEnrollments} completed</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-slate-800/50 border-slate-700">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">Completion Rate</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">{overallCompletionRate}%</div>
-            <Progress value={overallCompletionRate} className="h-2 mt-2" />
-          </CardContent>
-        </Card>
+      <div className="flex flex-wrap gap-1 border-b border-slate-700">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            aria-current={tab === t.id ? 'page' : undefined}
+            className={cn(
+              '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+              tab === t.id
+                ? 'border-blue-500 text-white'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {/* Course Performance */}
-      <Card className="bg-slate-800/50 border-slate-700">
-        <CardHeader>
-          <CardTitle className="text-white">Course Performance</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data.courseStats.length > 0 ? (
-            <div className="space-y-4">
-              {data.courseStats.map((course) => (
-                <div key={course.id} className="flex items-center gap-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-white truncate">{course.title}</p>
-                    <p className="text-sm text-slate-400">
-                      {course.enrollments} enrolled, {course.completions} completed
-                    </p>
-                  </div>
-                  <div className="w-32">
-                    <div className="flex justify-between text-xs text-slate-400 mb-1">
-                      <span>Completion</span>
-                      <span>{course.completion_rate}%</span>
-                    </div>
-                    <Progress value={course.completion_rate} className="h-2" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-slate-400 text-center py-4">No course data yet</p>
-          )}
-        </CardContent>
-      </Card>
+      {error && (
+        <div className="rounded-md border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">
+          {error}
+        </div>
+      )}
 
-      {/* Recent Activity */}
-      <Card className="bg-slate-800/50 border-slate-700">
-        <CardHeader>
-          <CardTitle className="text-white">Recent Activity</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data.recentActivity.length > 0 ? (
-            <div className="space-y-3">
-              {data.recentActivity.map((activity, index) => (
-                <div key={index} className="flex items-center gap-4 py-2 border-b border-slate-700 last:border-0">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white truncate">
-                      {activity.user_name || activity.user_email}
-                    </p>
-                    <p className="text-sm text-slate-400 truncate">
-                      {activity.course_title} - {activity.lesson_title}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className={`text-xs px-2 py-1 rounded ${
-                      activity.status === 'completed'
-                        ? 'bg-green-600/20 text-green-400'
-                        : 'bg-blue-600/20 text-blue-400'
-                    }`}>
-                      {activity.status}
-                    </span>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {new Date(activity.last_accessed_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-slate-400 text-center py-4">No recent activity</p>
+      {loading || !data ? (
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 bg-slate-800" />
+            ))}
+          </div>
+          <Skeleton className="h-64 bg-slate-800" />
+        </div>
+      ) : (
+        <>
+          {tab === 'summary' && (
+            <SummaryTab kpis={data.kpis} trend={data.trend} learners={data.learners} />
           )}
-        </CardContent>
-      </Card>
+          {tab === 'learners' && <LearnersTab learners={data.learners} />}
+          {tab === 'courses' && <CoursesTab courses={data.courses} />}
+          {tab === 'curve' && <CurveTab points={data.curve} learners={data.learners} />}
+          {tab === 'compliance' && (
+            <ComplianceTab rows={data.compliance.rows} summary={data.compliance.summary} />
+          )}
+        </>
+      )}
     </div>
   );
 }

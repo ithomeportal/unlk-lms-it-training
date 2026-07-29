@@ -32,15 +32,25 @@ export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  // Get dashboard stats
+  // Get dashboard stats.
+  //
+  // The time figure is a correlated subquery, NOT a join. It used to be
+  // `LEFT JOIN lesson_progress lp ON lp.user_id = e.user_id` — a cartesian
+  // product that multiplied every lesson's time by the user's enrollment count.
+  // It read as 0 only because time_spent_seconds was never written; now that
+  // the heartbeat populates it, that join would have inflated the number
+  // several-fold on the very first real measurement.
   const stats = await query<DashboardStats>(`
     SELECT
       COUNT(DISTINCT e.course_id) as enrolled_courses,
       COUNT(DISTINCT CASE WHEN e.completed_at IS NOT NULL THEN e.course_id END) as completed_courses,
       COUNT(DISTINCT CASE WHEN e.completed_at IS NULL THEN e.course_id END) as in_progress_courses,
-      COALESCE(SUM(lp.time_spent_seconds) / 60, 0) as total_time_minutes
+      COALESCE((
+        SELECT SUM(lp.time_spent_seconds) / 60
+        FROM lesson_progress lp
+        WHERE lp.user_id = $1
+      ), 0) as total_time_minutes
     FROM enrollments e
-    LEFT JOIN lesson_progress lp ON lp.user_id = e.user_id
     WHERE e.user_id = $1
   `, [user.id]);
 
@@ -72,18 +82,37 @@ export default async function DashboardPage() {
     LIMIT 24
   `, [user.id]);
 
-  // Get mandatory courses with upcoming deadlines
+  // Get OUTSTANDING mandatory courses.
+  //
+  // This query had no completion filter at all: it listed every assignment with
+  // a future due date regardless of whether the learner had finished it, so
+  // somebody who completed a required course kept seeing "Complete these
+  // courses by their due dates" — at 100% progress — until the deadline passed.
+  //
+  // A course counts as done when its enrollment is stamped OR when every lesson
+  // in it is complete. The second arm matters because a course could previously
+  // finish without its enrollment being stamped (see
+  // migrations/009_repair_regressed_progress.sql), and because a course with no
+  // lessons must not be treated as trivially complete — hence the COUNT > 0.
+  //
+  // Progress is counted per COMPLETED LESSON, not by averaging
+  // lesson_progress.progress_percent: that average silently omitted lessons the
+  // learner had never opened (no row = not in the AVG), so a course could read
+  // 100% with untouched lessons remaining.
   const mandatoryCourses = await query<MandatoryCourse>(`
     SELECT
       c.id, c.title, c.slug,
       ma.due_date,
-      COALESCE(
-        (SELECT AVG(COALESCE(lp.progress_percent, 0))
-         FROM lessons l
-         LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.user_id = $1
-         WHERE l.course_id = c.id),
-        0
-      )::int as progress_percent
+      COALESCE((
+        SELECT ROUND(
+          COUNT(*) FILTER (
+            WHERE lp.status = 'completed' OR lp.completed_at IS NOT NULL
+          )::numeric / NULLIF(COUNT(*), 0) * 100
+        )
+        FROM lessons l
+        LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.user_id = $1
+        WHERE l.course_id = c.id
+      ), 0)::int as progress_percent
     FROM mandatory_assignments ma
     JOIN courses c ON c.id = ma.course_id
     WHERE c.is_published = true
@@ -92,6 +121,21 @@ export default async function DashboardPage() {
         ma.assigned_to = 'all'
         OR (ma.assigned_to = 'domain' AND $2 LIKE '%' || ma.domain_filter)
         OR (ma.assigned_to = 'specific' AND $1 = ANY(ma.user_ids))
+      )
+      -- not already completed via the enrollment stamp
+      AND NOT EXISTS (
+        SELECT 1 FROM enrollments e
+        WHERE e.user_id = $1 AND e.course_id = c.id AND e.completed_at IS NOT NULL
+      )
+      -- ...nor by having finished every lesson in it
+      AND NOT (
+        (SELECT COUNT(*) FROM lessons l WHERE l.course_id = c.id) > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM lessons l
+          LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.user_id = $1
+          WHERE l.course_id = c.id
+            AND (lp.status IS NULL OR (lp.status <> 'completed' AND lp.completed_at IS NULL))
+        )
       )
     ORDER BY ma.due_date ASC
     LIMIT 3

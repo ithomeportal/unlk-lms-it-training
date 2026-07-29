@@ -24,31 +24,6 @@ export interface UserAnalytics {
   average_quiz_score: number | null;
 }
 
-// Helper function to calculate minimum required time for a lesson
-function calculateMinRequiredTime(
-  contentType: string,
-  durationMinutes: number,
-  textContent: string | null
-): number {
-  let minTimeSeconds = 0;
-
-  // Video time: Use 80% of stated duration as minimum
-  if (contentType === 'video' || contentType === 'mixed') {
-    minTimeSeconds += Math.floor(durationMinutes * 60 * 0.8);
-  }
-
-  // Text time: Calculate based on word count (150 words/min for learning)
-  if ((contentType === 'text' || contentType === 'mixed') && textContent) {
-    const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length;
-    const readingTimeSeconds = Math.ceil((wordCount / 150) * 60);
-    // Minimum 3 minutes for any text lesson
-    minTimeSeconds += Math.max(readingTimeSeconds, 180);
-  }
-
-  // If no duration set at all, default to 3 minutes
-  return minTimeSeconds || 180;
-}
-
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();

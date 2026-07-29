@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { canViewAdmin } from '@/lib/permissions';
+import { canViewAdmin, hasFullUserVisibility } from '@/lib/permissions';
 import { query, queryOne } from '@/lib/db';
+import { minRequiredSeconds } from '@/lib/learning-time';
 
 export interface LoginHistoryItem {
   id: string;
@@ -64,30 +65,13 @@ export interface UserDetail {
   last_login_at: string | null;
 }
 
-// Helper function to calculate minimum required time for a lesson
-function calculateMinRequiredTime(
-  contentType: string,
-  durationMinutes: number,
-  textContent: string | null
-): number {
-  let minTimeSeconds = 0;
-
-  // Video time: Use 80% of stated duration as minimum
-  if (contentType === 'video' || contentType === 'mixed') {
-    minTimeSeconds += Math.floor(durationMinutes * 60 * 0.8);
-  }
-
-  // Text time: Calculate based on word count (150 words/min for learning)
-  if ((contentType === 'text' || contentType === 'mixed') && textContent) {
-    const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length;
-    const readingTimeSeconds = Math.ceil((wordCount / 150) * 60);
-    // Minimum 3 minutes for any text lesson
-    minTimeSeconds += Math.max(readingTimeSeconds, 180);
-  }
-
-  // If no duration set at all, default to 3 minutes
-  return minTimeSeconds || 180;
-}
+/**
+ * Expected engagement time for a lesson. The implementation moved to
+ * src/lib/learning-time.ts so this route, the Reports zone and the tests all
+ * apply one definition — it previously existed as two hand-copied versions,
+ * one of them dead, in this route and api/admin/analytics/route.ts.
+ */
+const calculateMinRequiredTime = minRequiredSeconds;
 
 export async function GET(
   request: NextRequest,
@@ -108,6 +92,15 @@ export async function GET(
       FROM users
       WHERE id = $1
     `, [userId]);
+
+    // A plain admin does not see super_admins in the analytics LIST (that
+    // query filters them out), but this detail route only checked canViewAdmin
+    // — so guessing or copying a UUID reached the hidden record anyway,
+    // including its full login history and IP addresses. Enforce the same
+    // visibility rule the list applies. Viewing yourself is always allowed.
+    if (user && !hasFullUserVisibility(currentUser) && user.role === 'super_admin' && user.id !== currentUser.id) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
