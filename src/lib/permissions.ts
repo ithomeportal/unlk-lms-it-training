@@ -37,6 +37,32 @@ const EXPORT_ROLES: readonly Role[] = ['super_admin', 'auditor'] as const;
 /** Roles whose oversight is unrestricted — they see every user's rows, including super_admins. */
 const FULL_VISIBILITY_ROLES: readonly Role[] = ['super_admin', 'auditor'] as const;
 
+/**
+ * Roles allowed to CHANGE another user's role.
+ *
+ * Deliberately narrower than `canManage`: assigning a role is privilege
+ * escalation, not content management. A plain `admin` who could grant
+ * `super_admin` would be a super_admin in one request, and an `admin` who could
+ * grant `auditor` could hand out unrestricted visibility of every learner's
+ * activity. Content management and privilege management are separate powers.
+ */
+const MANAGE_ROLES_ROLES: readonly Role[] = ['super_admin'] as const;
+
+/**
+ * Roles that may be ASSIGNED through the admin UI.
+ *
+ * Identical to ROLES today. It exists as its own list so that removing a role
+ * from the UI (say, `instructor` while it remains a no-op) never means deleting
+ * it from `ROLES` — which would break `roleLabel`/`roleBadgeClass` for users who
+ * already hold it, and make the DB CHECK constraint and this file disagree.
+ */
+export const ASSIGNABLE_ROLES: readonly Role[] = ROLES;
+
+/** True when `role` is a value the database CHECK constraint will accept. */
+export function isValidRole(role: unknown): role is Role {
+  return typeof role === 'string' && (ROLES as readonly string[]).includes(role);
+}
+
 // These deliberately return `boolean`, NOT a `user is User` type predicate.
 // A predicate is sound in the positive branch but LIES in the negative one:
 // `if (!canManage(u))` would narrow `u` to `null`, when in reality it may be a
@@ -81,6 +107,17 @@ export function canExportData(user: User | null | undefined): boolean {
  */
 export function hasFullUserVisibility(user: User | null | undefined): boolean {
   return hasRole(user, FULL_VISIBILITY_ROLES);
+}
+
+/**
+ * WRITE gate for role assignment specifically. Guard `PATCH /api/admin/users/
+ * [id]/role` and the role control on /admin/users with this — never `canManage`.
+ *
+ * Registered in scripts/audit-route-permissions.mjs as a write gate, so the
+ * audit does not report the handler it guards as ungated.
+ */
+export function canManageRoles(user: User | null | undefined): boolean {
+  return hasRole(user, MANAGE_ROLES_ROLES);
 }
 
 export function isSuperAdmin(user: User | null | undefined): boolean {

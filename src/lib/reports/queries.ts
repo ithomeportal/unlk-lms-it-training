@@ -286,7 +286,7 @@ export async function fetchCourses(): Promise<CourseRow[]> {
       SELECT id FROM users WHERE ${excludeSystemAccountsSql('email')}
     )
     SELECT
-      c.id, c.title, cat.name AS category_name, c.is_mandatory,
+      c.id, c.title, cat.name AS category_name, c.is_mandatory, c.is_published,
       (SELECT COUNT(*) FROM lessons l WHERE l.course_id = c.id)::int AS lesson_count,
       (SELECT COALESCE(SUM(l.duration_minutes), 0) FROM lessons l WHERE l.course_id = c.id)::int AS declared_minutes,
       (SELECT COUNT(*) FROM enrollments e JOIN learners u ON u.id = e.user_id

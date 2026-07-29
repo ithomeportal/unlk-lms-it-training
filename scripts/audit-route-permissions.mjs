@@ -18,7 +18,7 @@ const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 // Gates that must never appear in a mutating handler.
 const READ_ONLY_GATES = ['canViewAdmin', 'canExportData', 'hasFullUserVisibility'];
-const WRITE_GATES = ['canManage', 'isAdmin', 'isSuperAdmin'];
+const WRITE_GATES = ['canManage', 'isAdmin', 'isSuperAdmin', 'canManageRoles'];
 
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir)) {

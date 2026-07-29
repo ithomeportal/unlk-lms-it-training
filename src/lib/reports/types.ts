@@ -78,6 +78,13 @@ export interface CourseRow {
   title: string;
   category_name: string | null;
   is_mandatory: boolean;
+  /**
+   * Draft courses are reported on (they still have lessons and, once anyone is
+   * enrolled, progress) but must never be presented as AVAILABLE — the weekly
+   * digest's catalog filters on this. `courses.is_published` defaults to FALSE,
+   * so a course can import cleanly and still be invisible in the catalog.
+   */
+  is_published: boolean;
   lesson_count: number;
   declared_minutes: number;
   enrollments: number;

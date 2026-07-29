@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { User } from './types';
 import {
+  ASSIGNABLE_ROLES,
   ROLES,
   Role,
   canExportData,
   canManage,
+  canManageRoles,
   canViewAdmin,
   hasFullUserVisibility,
   isAuditor,
   isSuperAdmin,
+  isValidRole,
   roleBadgeClass,
   roleLabel,
 } from './permissions';
@@ -144,6 +147,56 @@ describe('role presentation', () => {
   it('gives every role a badge class', () => {
     for (const role of ROLES) expect(roleBadgeClass(role)).toMatch(/border-/);
     expect(roleBadgeClass('root')).toBe(roleBadgeClass('learner'));
+  });
+});
+
+// --- role assignment (PATCH /api/admin/users/[id]/role) ---
+
+describe('canManageRoles', () => {
+  it('admits super_admin only', () => {
+    expect(canManageRoles(asUser('super_admin'))).toBe(true);
+    for (const role of ['admin', 'auditor', 'instructor', 'learner'] as Role[]) {
+      expect(canManageRoles(asUser(role))).toBe(false);
+    }
+  });
+
+  it('is STRICTLY narrower than canManage', () => {
+    // The whole point of the gate. An `admin` passes canManage and must still
+    // be refused here: otherwise they could grant themselves super_admin, or
+    // hand out `auditor` — unrestricted visibility of every learner's activity
+    // — as though it were a content permission.
+    const admin = asUser('admin');
+    expect(canManage(admin)).toBe(true);
+    expect(canManageRoles(admin)).toBe(false);
+  });
+
+  it('rejects a missing user', () => {
+    expect(canManageRoles(null)).toBe(false);
+    expect(canManageRoles(undefined)).toBe(false);
+  });
+});
+
+describe('isValidRole', () => {
+  it('accepts every role the DB CHECK constraint accepts', () => {
+    for (const role of ROLES) expect(isValidRole(role)).toBe(true);
+  });
+
+  it("rejects 'user', which does not exist in this platform", () => {
+    // The DB constraint rejects it too, but failing here turns a 500 into a
+    // 400 that says what the allowed values are.
+    expect(isValidRole('user')).toBe(false);
+  });
+
+  it('rejects non-strings and near-misses', () => {
+    for (const bad of ['', 'SUPER_ADMIN', 'superadmin', 'root', null, undefined, 1, {}, []]) {
+      expect(isValidRole(bad)).toBe(false);
+    }
+  });
+});
+
+describe('ASSIGNABLE_ROLES', () => {
+  it('never offers a role the database would reject', () => {
+    for (const role of ASSIGNABLE_ROLES) expect(isValidRole(role)).toBe(true);
   });
 });
 

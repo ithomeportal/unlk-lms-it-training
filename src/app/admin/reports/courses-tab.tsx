@@ -31,7 +31,18 @@ export function CoursesTab({ courses }: { courses: CourseRow[] }) {
       sortValue: (r) => r.title.toLowerCase(),
       cell: (r) => (
         <div className="min-w-0 max-w-[22rem]">
-          <p className="truncate font-medium text-white">{r.title}</p>
+          <p className="flex items-center gap-2 font-medium text-white">
+            <span className="truncate">{r.title}</span>
+            {/* is_published defaults to FALSE, so a course can import cleanly,
+                count correctly here, and be invisible to every learner. Without
+                this badge that state is indistinguishable from a live course
+                nobody has enrolled in. */}
+            {!r.is_published && (
+              <Badge variant="outline" className="shrink-0 border-slate-600 text-slate-400 text-xs">
+                Draft
+              </Badge>
+            )}
+          </p>
           <p className="truncate text-xs text-slate-500">
             {r.category_name || 'Uncategorised'} · {r.lesson_count} lessons · {r.declared_minutes} min
           </p>
