@@ -189,11 +189,6 @@ describe('buildWeeklyDigest', () => {
     expect(digest.subject).toContain('20 Jul 2026');
   });
 
-  it('states the movement against the week before', () => {
-    // 21 lessons after 44 is a fall, and the sentence must say so.
-    expect(build().html).toContain('down from 44');
-  });
-
   it('escapes learner names and course titles', () => {
     const html = build({
       learners: [learner({ name: '<b>Ana</b> & Co', status: 'at_risk', days_since_activity: 40 })],
@@ -247,15 +242,16 @@ describe('buildWeeklyDigest', () => {
     expect(digest.html).toContain('Late Learner');
     expect(digest.html).toContain('Soon Learner');
     expect(digest.html).toContain('9d late');
-    // A completed assignment is counted but not named in the action list.
-    expect(digest.html).toContain('past its deadline');
+    // A completed assignment is counted in the tiles but not named in the
+    // action list, which only carries what needs following up.
+    expect(digest.html).not.toContain('Done Learner');
+    expect(digest.html).toContain('Overdue');
   });
 
   it('says so plainly when nothing is overdue', () => {
     const html = build({
       compliance: compliance([complianceRow({ state: 'completed', days_remaining: 5 })]),
     }).html;
-    expect(html).toContain('No required course is past its deadline');
     expect(html).toContain('Nothing is overdue or due within seven days');
   });
 
@@ -282,17 +278,24 @@ describe('buildWeeklyDigest', () => {
     expect(digest.html).toContain('No published courses');
   });
 
-  it('keeps credited and measured time separate and labelled', () => {
-    // These must never be summed: measured was not written at all before
-    // 2026-07-29, so adding them would present an estimate as a measurement.
+  it('reports credited time only, labelled as authored duration', () => {
+    // Credited (authored duration of completed lessons) and measured (heartbeat)
+    // are different kinds of number and must never be summed — measured was not
+    // written at all before 2026-07-29. The email therefore reports ONE of them,
+    // credited, and says what it is. Showing both invites a recipient to add
+    // them, which is why the explanatory paragraph was dropped.
     const html = build().html;
     expect(html).toContain('Credited time');
-    expect(html).toContain('never added together');
-    expect(html).toContain('still being collected');
+    expect(html).toContain('Authored duration, completed lessons');
+    expect(html).toContain('11.0h');
 
+    // Measured time must not appear at all, in either state — not as a figure
+    // and not as a caveat.
     const withMeasured = build({ kpis: { ...KPIS, measured_seconds: 7_200 } }).html;
-    expect(withMeasured).toContain('Observed time on task so far');
-    expect(withMeasured).toContain('2.0h');
+    expect(withMeasured).not.toMatch(/measured|observed|time on task/i);
+    expect(withMeasured).not.toContain('2.0h');
+    // Changing measured_seconds must not change the email at all.
+    expect(withMeasured).toBe(html);
   });
 
   it('carries no remote image or external stylesheet', () => {
@@ -386,7 +389,7 @@ describe('buildWeeklyDigest', () => {
     expect(html).not.toMatch(/>\s+</);
     // The regression this guards: a naive `\n\s+` collapse turns a wrapped
     // sentence into run-together words.
-    expect(html).toContain('never added together');
+    expect(html).toContain('Every learner sits in exactly one bucket');
     expect(html).not.toMatch(/[a-z]{25,}/);
   });
 

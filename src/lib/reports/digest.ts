@@ -190,6 +190,9 @@ function splitTrend(trend: TrendPoint[], now: Date) {
   return {
     complete,
     latest: complete.length ? complete[complete.length - 1] : null,
+    // Unused since the narrative sentence was dropped, but the trend table
+    // still needs `complete` split the same way and the week-over-week
+    // comparison is the obvious next thing anyone will want.
     previous: complete.length > 1 ? complete[complete.length - 2] : null,
   };
 }
@@ -276,59 +279,6 @@ function headerBand(weekStart: string | null, weekEnd: string | null): string {
 </td></tr>`;
 }
 
-/**
- * The narrative line.
- *
- * A grid of tiles tells a reader who already knows the metrics what changed. It
- * does not tell the head of HR whether the week was good. One sentence, stating
- * the movement and naming the single thing that needs a decision, does.
- */
-function narrative(
-  kpis: KpiRow,
-  latest: TrendPoint | null,
-  previous: TrendPoint | null,
-  learners: LearnerRow[],
-  summary: ComplianceSummary
-): string {
-  const lessons = latest?.lessons_completed ?? 0;
-  const active = latest?.active_learners ?? 0;
-  const before = previous?.lessons_completed ?? null;
-
-  // The leading comma matters: without it the sentence reads "completing 0
-  // lessons unchanged from the week before", which parses as one noun phrase.
-  let movement = '';
-  if (before !== null) {
-    if (lessons > before) movement = `, up from ${num(before)} the week before`;
-    else if (lessons < before) movement = `, down from ${num(before)} the week before`;
-    else movement = ', unchanged from the week before';
-  }
-
-  const atRisk = learners.filter((l) => l.status === 'at_risk').length;
-  const stalled = learners.filter((l) => l.status === 'stalled').length;
-
-  const parts: string[] = [
-    `<strong style="color:${INK};">${num(active)}</strong> of ${num(kpis.total_learners)} learners were active, completing <strong style="color:${INK};">${num(lessons)}</strong> lesson${lessons === 1 ? '' : 's'}${movement}.`,
-  ];
-
-  if (summary.overdue > 0) {
-    parts.push(
-      `<strong style="color:${RED};">${num(summary.overdue)} required course assignment${summary.overdue === 1 ? ' is' : 's are'} past its deadline</strong> and needs follow-up.`
-    );
-  } else if (summary.total > 0) {
-    parts.push(`No required course is past its deadline.`);
-  }
-
-  if (atRisk + stalled > 0) {
-    parts.push(
-      `${num(atRisk)} learner${atRisk === 1 ? '' : 's'} at risk and ${num(stalled)} stalled — listed below.`
-    );
-  }
-
-  return `<tr><td style="padding:24px 32px 4px;">
-  <p style="margin:0;font:400 15px/1.6 ${DISPLAY_FONT};color:${BODY};">${parts.join(' ')}</p>
-</td></tr>`;
-}
-
 function kpiGrid(kpis: KpiRow, learners: LearnerRow[]): string {
   const completion = percent(kpis.completed_enrollments, kpis.total_enrollments);
   const quizPass = percent(kpis.quizzes_passed, kpis.quizzes_taken);
@@ -350,28 +300,6 @@ function kpiGrid(kpis: KpiRow, learners: LearnerRow[]): string {
       ${kpi('Median pace', formatDays(kpis.median_days_to_complete), 'Enrolment to completion')}
     </tr>
   </table>
-</td></tr>`;
-}
-
-/**
- * Measured vs credited time, stated in words.
- *
- * These two must never be summed or averaged together: credited is the duration
- * the author declared for lessons that were finished, measured is real observed
- * time from the heartbeat, which was not written at all before 29 Jul 2026.
- * Presenting them as one figure would present an estimate as a measurement.
- */
-function timeNote(kpis: KpiRow): string {
-  const measured =
-    kpis.measured_seconds > 0
-      ? `Observed time on task so far: <strong style="color:${INK};">${formatHours(kpis.measured_seconds)}</strong>.`
-      : `Observed time on task is still being collected (instrumented 29 Jul 2026), so only credited time is meaningful yet.`;
-  return `<tr><td style="padding:14px 32px 0;">
-  <p style="margin:0;font:400 12px/1.6 ${FONT};color:${MUTED};">
-    <strong style="color:${BODY};">On the two time figures:</strong> credited time is the duration the
-    course author declared for lessons that were completed; it covers all history. ${measured}
-    They are reported separately and are never added together.
-  </p>
 </td></tr>`;
 }
 
@@ -694,7 +622,7 @@ export function buildWeeklyDigest(input: DigestInput): Digest {
   const now = input.now ?? new Date();
   const appUrl = (input.appUrl || 'https://lms.unilinkportal.com').replace(/\/+$/, '');
   const { kpis, learners, courses, compliance } = input;
-  const { complete, latest, previous } = splitTrend(input.trend, now);
+  const { complete, latest } = splitTrend(input.trend, now);
 
   const weekStart = latest?.week_start ?? null;
   const weekEnd = weekStart
@@ -709,9 +637,7 @@ export function buildWeeklyDigest(input: DigestInput): Digest {
 <tr><td align="center" style="padding:24px 12px;">
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="680" style="width:680px;max-width:680px;border-collapse:collapse;background:#ffffff;border-radius:8px;overflow:hidden;">
     ${headerBand(weekStart, weekEnd)}
-    ${narrative(kpis, latest, previous, learners, compliance.summary)}
     ${kpiGrid(kpis, learners)}
-    ${timeNote(kpis)}
     ${heading('Activity by week')}
     ${trendTable(complete)}
     ${heading('Where the cohort stands')}
