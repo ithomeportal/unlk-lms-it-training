@@ -207,9 +207,39 @@ describe('system account exclusion', () => {
     expect(systemAccountEmails()).toContain('monitor@unilinkportal.com');
   });
 
+  it('excludes the operator accounts, who are not learners', () => {
+    // They have real sessions and test enrolments, so counting them inflates
+    // total_learners and never_started, drags the completion rate down, and puts
+    // them in the weekly HR email's at-risk list.
+    const emails = systemAccountEmails();
+    expect(emails).toContain('ithome@unilinkportal.com');
+    expect(emails).toContain('dfrodriguez@unilinktransportation.com');
+  });
+
+  it('returns no duplicates', () => {
+    // `NOT IN ('x', 'x')` is harmless but signals the list is not being
+    // deduplicated, which matters if HEALTH_MONITOR_EMAIL is ever pointed at one
+    // of the operator accounts.
+    const emails = systemAccountEmails();
+    expect(new Set(emails).size).toBe(emails.length);
+  });
+
+  it('lower-cases every address, since the predicate compares on lower()', () => {
+    const prev = process.env.HEALTH_MONITOR_EMAIL;
+    process.env.HEALTH_MONITOR_EMAIL = 'Monitor@UnilinkPortal.com';
+    try {
+      expect(systemAccountEmails()).toContain('monitor@unilinkportal.com');
+    } finally {
+      if (prev === undefined) delete process.env.HEALTH_MONITOR_EMAIL;
+      else process.env.HEALTH_MONITOR_EMAIL = prev;
+    }
+  });
+
   it('builds a predicate against the given column', () => {
-    expect(excludeSystemAccountsSql('u.email'))
-      .toBe("lower(u.email) NOT IN ('monitor@unilinkportal.com')");
+    expect(excludeSystemAccountsSql('u.email')).toBe(
+      "lower(u.email) NOT IN ('monitor@unilinkportal.com', " +
+        "'ithome@unilinkportal.com', 'dfrodriguez@unilinktransportation.com')"
+    );
   });
 
   it('refuses to interpolate a malformed address', () => {
