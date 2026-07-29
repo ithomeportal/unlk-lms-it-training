@@ -30,10 +30,18 @@
  */
 const EMAIL_RE = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
 
-/** Operator accounts: administer or build the platform, are not being trained. */
+/**
+ * Operator accounts: administer or build the platform, are not being trained.
+ *
+ * Only the super_admin SERVICE account. The platform owner
+ * (`dfrodriguez@unilinktransportation.com`) was briefly excluded here on
+ * 2026-07-29 and deliberately put back the same day: unlike `ithome@`, they take
+ * the courses for real, so their progress is genuine training activity and
+ * belongs in the numbers. The distinction is "does this account learn", not "does
+ * this person also administer the platform".
+ */
 const OPERATOR_EMAILS = [
   'ithome@unilinkportal.com', // IT Home Admin — the super_admin service account
-  'dfrodriguez@unilinktransportation.com', // Diego Rodriguez — platform owner
 ] as const;
 
 export function systemAccountEmails(): string[] {

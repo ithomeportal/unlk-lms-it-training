@@ -207,13 +207,17 @@ describe('system account exclusion', () => {
     expect(systemAccountEmails()).toContain('monitor@unilinkportal.com');
   });
 
-  it('excludes the operator accounts, who are not learners', () => {
-    // They have real sessions and test enrolments, so counting them inflates
-    // total_learners and never_started, drags the completion rate down, and puts
-    // them in the weekly HR email's at-risk list.
-    const emails = systemAccountEmails();
-    expect(emails).toContain('ithome@unilinkportal.com');
-    expect(emails).toContain('dfrodriguez@unilinktransportation.com');
+  it('excludes the super_admin service account, which is not a learner', () => {
+    // Its test enrolments inflated total_learners, dragged the completion rate
+    // down, and put it in the weekly HR email's at-risk list.
+    expect(systemAccountEmails()).toContain('ithome@unilinkportal.com');
+  });
+
+  it('does NOT exclude the platform owner, who takes the courses for real', () => {
+    // Excluded briefly on 2026-07-29 and reverted the same day. The test is here
+    // so the revert is deliberate rather than something a later edit undoes by
+    // pattern-matching "administrator" to "not a learner".
+    expect(systemAccountEmails()).not.toContain('dfrodriguez@unilinktransportation.com');
   });
 
   it('returns no duplicates', () => {
@@ -237,8 +241,7 @@ describe('system account exclusion', () => {
 
   it('builds a predicate against the given column', () => {
     expect(excludeSystemAccountsSql('u.email')).toBe(
-      "lower(u.email) NOT IN ('monitor@unilinkportal.com', " +
-        "'ithome@unilinkportal.com', 'dfrodriguez@unilinktransportation.com')"
+      "lower(u.email) NOT IN ('monitor@unilinkportal.com', 'ithome@unilinkportal.com')"
     );
   });
 
