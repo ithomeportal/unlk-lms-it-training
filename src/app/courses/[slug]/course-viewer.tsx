@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { LessonInteractives } from './lesson-interactives';
 
 // Browser-only: keeps isomorphic-dompurify (and jsdom) out of the server
 // bundle. See sanitized-html.tsx for why.
@@ -358,6 +359,7 @@ export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex
 
             {/* Text Content - Magazine Layout */}
             {(currentLesson.content_type === 'text' || currentLesson.content_type === 'mixed') && currentLesson.text_content && (
+              <LessonInteractives onContinue={markComplete}>
               <SanitizedHtml
                 className="mb-6 lesson-content text-slate-300 leading-relaxed
                   [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-8 [&_h2]:mb-4 [&_h2]:p-4 [&_h2]:bg-gradient-to-r [&_h2]:from-blue-600/20 [&_h2]:to-purple-600/20 [&_h2]:rounded-xl [&_h2]:border [&_h2]:border-blue-500/20
@@ -408,9 +410,40 @@ export function CourseViewer({ course, lessons, currentLessonIndex: initialIndex
                   [&_.badge]:inline-flex [&_.badge]:items-center [&_.badge]:px-2.5 [&_.badge]:py-0.5 [&_.badge]:rounded-full [&_.badge]:text-xs [&_.badge]:font-medium
                   [&_.badge-blue]:bg-blue-900/50 [&_.badge-blue]:text-blue-300
                   [&_.badge-green]:bg-emerald-900/50 [&_.badge-green]:text-emerald-300
-                  [&_.badge-purple]:bg-purple-900/50 [&_.badge-purple]:text-purple-300"
+                  [&_.badge-purple]:bg-purple-900/50 [&_.badge-purple]:text-purple-300
+
+                  [&_table]:w-full [&_table]:my-6 [&_table]:text-sm [&_table]:border-collapse [&_table]:border [&_table]:border-slate-700 [&_table]:rounded-lg [&_table]:overflow-hidden
+                  [&_th]:bg-slate-800 [&_th]:p-3 [&_th]:text-left [&_th]:font-semibold [&_th]:text-white [&_th]:border [&_th]:border-slate-700
+                  [&_td]:p-3 [&_td]:align-top [&_td]:border [&_td]:border-slate-700
+                  [&_tbody_tr:nth-child(even)]:bg-slate-800/30
+
+                  [&_.video-caption]:bg-[#0056B3] [&_.video-caption]:text-white [&_.video-caption]:font-semibold [&_.video-caption]:text-xs [&_.video-caption]:uppercase [&_.video-caption]:tracking-wider [&_.video-caption]:px-4 [&_.video-caption]:py-2 [&_.video-caption]:rounded-md [&_.video-caption]:-mt-2 [&_.video-caption]:mb-6
+
+                  [&_.callout-critical]:bg-[#F8D7DA] [&_.callout-critical]:text-[#212529] [&_.callout-critical]:border-[#DC3545]
+                  [&_.callout-success]:bg-[#D4EDDA] [&_.callout-success]:text-[#212529] [&_.callout-success]:border-[#28A745]
+                  [&_.callout-amber]:bg-[#FFF3CD] [&_.callout-amber]:text-[#212529] [&_.callout-amber]:border-[#FFC107]
+                  [&_.callout-neutral]:bg-[#F8F9FA] [&_.callout-neutral]:text-[#212529] [&_.callout-neutral]:border-[#0056B3]
+                  [&_.callout-critical_strong]:text-[#212529] [&_.callout-success_strong]:text-[#212529]
+                  [&_.callout-amber_strong]:text-[#212529] [&_.callout-neutral_strong]:text-[#212529]
+
+                  [&_.info-card]:bg-[#F8F9FA] [&_.info-card]:text-[#212529] [&_.info-card]:p-4 [&_.info-card]:rounded-lg [&_.info-card]:border [&_.info-card]:border-slate-400
+                  [&_.info-card_strong]:text-[#212529]
+                  [&_.info-card-title]:block [&_.info-card-title]:font-semibold [&_.info-card-title]:text-[#0056B3] [&_.info-card-title]:mb-2
+                  [&_.info-card-do]:border-l-4 [&_.info-card-do]:border-l-[#28A745]
+                  [&_.info-card-dont]:border-l-4 [&_.info-card-dont]:border-l-[#DC3545]
+
+                  [&_.kc-block]:my-8 [&_.kc-block]:p-5 [&_.kc-block]:rounded-xl [&_.kc-block]:bg-slate-800/40 [&_.kc-block]:border [&_.kc-block]:border-slate-700
+                  [&_.kc-title]:text-white [&_.kc-title]:font-semibold [&_.kc-title]:mb-4
+                  [&_.kc-prompt]:text-white [&_.kc-prompt]:font-medium [&_.kc-prompt]:mb-3
+                  [&_.kc-option]:block [&_.kc-option]:w-full [&_.kc-option]:text-left [&_.kc-option]:px-4 [&_.kc-option]:py-3 [&_.kc-option]:mb-2 [&_.kc-option]:rounded-lg [&_.kc-option]:bg-slate-900/60 [&_.kc-option]:border [&_.kc-option]:border-slate-700 [&_.kc-option]:cursor-pointer [&_.kc-option]:transition-colors
+                  [&_.kc-question:not(.kc-answered)_.kc-option]:hover:bg-slate-700/60
+                  [&_.kc-option.kc-right]:bg-[#D4EDDA] [&_.kc-option.kc-right]:text-[#212529] [&_.kc-option.kc-right]:border-[#28A745]
+                  [&_.kc-option.kc-wrong]:bg-[#F8D7DA] [&_.kc-option.kc-wrong]:text-[#212529] [&_.kc-option.kc-wrong]:border-[#DC3545]
+
+                  [&_.module-continue]:inline-flex [&_.module-continue]:items-center [&_.module-continue]:mt-8 [&_.module-continue]:px-5 [&_.module-continue]:py-3 [&_.module-continue]:rounded-lg [&_.module-continue]:bg-[#0056B3] [&_.module-continue]:text-white [&_.module-continue]:font-semibold [&_.module-continue]:cursor-pointer [&_.module-continue]:hover:bg-[#004494] [&_.module-continue]:transition-colors"
                 html={currentLesson.text_content}
               />
+              </LessonInteractives>
             )}
 
             {/* Description - Magazine Layout */}
