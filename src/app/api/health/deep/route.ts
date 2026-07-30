@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { Resend } from 'resend';
 import { execute, queryOne } from '@/lib/db';
+import { isAllowedEmail } from '@/lib/auth';
 
 /**
  * Deep health check — renders the pages that carry the product and asserts on
@@ -240,7 +241,10 @@ export async function GET(request: NextRequest) {
   let alerted = false;
   if (!ok) {
     try {
-      if (await shouldAlert()) {
+      // HEALTH_ALERT_EMAIL is an unvalidated env var — a typo'd Vercel value
+      // would mail outside the tenant with no code change. Same rule as the
+      // login path (src/lib/auth.ts).
+      if (await shouldAlert() && isAllowedEmail(ALERT_EMAIL)) {
         const rows = failures
           .map((f) => `<li><strong>${f.name}</strong> <code>${f.path}</code> — ${f.detail}</li>`)
           .join('');

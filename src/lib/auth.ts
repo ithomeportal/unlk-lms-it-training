@@ -72,9 +72,44 @@ function checkVerifyLimit(email: string): boolean {
   return true;
 }
 
-// Check if email domain is allowed
+/**
+ * Company email domains — the Microsoft 365 tenant's verified domains
+ * (Graph `GET /domains`). This governs BOTH who may sign in and who this app
+ * may email: `sendAuthCode` checks it before the Resend call, and the login code
+ * is the only recipient-bearing mail the app sends.
+ *
+ * Widened from 2 to 16 on 2026-07-30. The old two-element literal locked out
+ * staff on oiltex.com, seekequipment.com and the other tenant domains, and a
+ * one-line edit to it would silently turn a public, unauthenticated endpoint
+ * into an open relay for UNILINK-branded mail.
+ *
+ * Override with ALLOWED_EMAIL_DOMAINS (comma-separated); updating this list is
+ * the durable fix.
+ */
+const ORG_EMAIL_DOMAINS = [
+  'hireinternational.com',
+  'itunilink.com',
+  'mencarllc.com',
+  'mencarotr.com',
+  'mspekt.com',
+  'oiltex.com',
+  'otxtransport.com',
+  'otxtransportation.com',
+  'prosperityenergyresources.com',
+  'seekequipment.com',
+  'u-capital.com',
+  'unilinkcapital.com',
+  'unilinkportal.com',
+  'unilinktransportation.com',
+  'unilinktransportationsa.mail.onmicrosoft.com',
+  'unilinktransportationsa.onmicrosoft.com',
+];
+
 export function isAllowedEmail(email: string): boolean {
-  const allowedDomains = ['unilinktransportation.com', 'unilinkportal.com'];
+  const override = process.env.ALLOWED_EMAIL_DOMAINS;
+  const allowedDomains = override && override.trim()
+    ? override.split(',').map((d) => d.trim().toLowerCase().replace(/^@/, '')).filter(Boolean)
+    : ORG_EMAIL_DOMAINS;
   const domain = email.toLowerCase().split('@')[1];
   return allowedDomains.includes(domain);
 }
