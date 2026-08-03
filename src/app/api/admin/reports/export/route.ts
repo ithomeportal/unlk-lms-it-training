@@ -6,6 +6,7 @@ import {
   fetchCompliance,
   fetchCourses,
   fetchLearners,
+  scopeFromParams,
   type ComplianceRow,
   type CourseRow,
   type LearnerRow,
@@ -115,14 +116,18 @@ export async function GET(request: NextRequest) {
     }
     const view = requested as View;
 
+    // The export must carry the SAME cohort as the tab it was taken from —
+    // otherwise the download quietly contains rows the screen did not show.
+    const scope = scopeFromParams(request.nextUrl.searchParams);
+
     let csv: string;
     if (view === 'courses') {
-      csv = toCsv(COURSE_COLUMNS, await fetchCourses());
+      csv = toCsv(COURSE_COLUMNS, await fetchCourses(scope));
     } else if (view === 'compliance') {
-      csv = toCsv(COMPLIANCE_COLUMNS, await fetchCompliance());
+      csv = toCsv(COMPLIANCE_COLUMNS, await fetchCompliance(scope));
     } else {
       const search = request.nextUrl.searchParams.get('search')?.trim() || undefined;
-      csv = toCsv(LEARNER_COLUMNS, await fetchLearners(search));
+      csv = toCsv(LEARNER_COLUMNS, await fetchLearners(search, scope));
     }
 
     // BOM so Excel detects UTF-8 and does not mangle accented names.

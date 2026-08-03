@@ -50,6 +50,10 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const format = searchParams.get('format') || 'csv';
+    // Matches the analytics screen: current employees unless asked otherwise,
+    // so the download can never contain rows the list did not show.
+    const includeInactive = searchParams.get('includeInactive') === '1';
+    const activeClause = includeInactive ? '' : 'AND u.is_active = true';
 
     // Get all users with aggregated analytics
     const users = await query<ExportRow>(`
@@ -117,6 +121,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN progress_stats ps ON ps.user_id = u.id
       LEFT JOIN quiz_stats qs ON qs.user_id = u.id
       WHERE ${excludeSystemAccountsSql('u.email')}
+        ${activeClause}
       ORDER BY u.created_at DESC
     `);
 

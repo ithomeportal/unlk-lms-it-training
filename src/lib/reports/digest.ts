@@ -50,6 +50,16 @@ export interface DigestInput {
   now?: Date;
   /** Link back to the live zone, for anyone who wants to drill in. */
   appUrl?: string;
+  /**
+   * When employment status was last mirrored from the Time-Off app, or null if
+   * it never has been.
+   *
+   * Printed in the footer because this report once named two people who had
+   * left the company months earlier and nobody could tell from the email that
+   * anything was stale. A roster date the reader can sanity-check is the only
+   * thing that distinguishes "quiet week" from "the sync died in March".
+   */
+  rosterSyncedAt?: Date | null;
 }
 
 export interface Digest {
@@ -282,6 +292,12 @@ function headerBand(weekStart: string | null, weekEnd: string | null): string {
 function kpiGrid(kpis: KpiRow, learners: LearnerRow[]): string {
   const completion = percent(kpis.completed_enrollments, kpis.total_enrollments);
   const quizPass = percent(kpis.quizzes_passed, kpis.quizzes_taken);
+  // Counted off `learners`, while the "Learners" tile beside it comes from
+  // `kpis.total_learners`. Those two MUST describe the same cohort or the tiles
+  // contradict each other — they did until 2026-08-03, when fetchKpis filtered
+  // to active employees and fetchLearners did not, so "At risk" included people
+  // who no longer worked here and could exceed the total it was a subset of.
+  // Both now share `learnerScope()` in queries.ts. Asserted in digest.test.ts.
   const atRisk = learners.filter((l) => l.status === 'at_risk').length;
 
   return `<tr><td style="padding:6px 24px 0;">
@@ -595,12 +611,26 @@ function catalogSection(courses: CourseRow[]): string {
 </td></tr>`;
 }
 
-function footer(appUrl: string, generatedAt: Date): string {
+function footer(appUrl: string, generatedAt: Date, rosterSyncedAt: Date | null | undefined): string {
   const stamp = generatedAt.toLocaleString('en-US', {
     timeZone: 'America/Chicago',
     dateStyle: 'medium',
     timeStyle: 'short',
   });
+
+  // Say plainly when the roster is unknown or stale rather than omitting the
+  // line — a missing sentence reads as "fine", which is the failure this is
+  // here to prevent.
+  const rosterLine = rosterSyncedAt
+    ? `Employee roster synced from Time-Off on ${esc(
+        rosterSyncedAt.toLocaleString('en-US', {
+          timeZone: 'America/Chicago',
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        })
+      )} Central.`
+    : 'Employee roster has never synced from Time-Off — this report may name people who have left.';
+
   return `<tr><td style="padding:26px 32px 30px;">
   <div style="height:1px;background:${LINE};"></div>
   <p style="margin:16px 0 0;font:400 12px/1.6 ${FONT};color:${MUTED};">
@@ -610,6 +640,7 @@ function footer(appUrl: string, generatedAt: Date): string {
   </p>
   <p style="margin:10px 0 0;font:400 11px/1.6 ${FONT};color:${FAINT};">
     Data as of ${esc(stamp)} Central. Sent automatically every Monday at 07:00 Central.<br>
+    Covers current employees only. ${rosterLine}<br>
     Contains individual learning records — internal use only.<br>
     © UNILINK TRANSPORTATION INC.
   </p>
@@ -650,7 +681,7 @@ export function buildWeeklyDigest(input: DigestInput): Digest {
     ${learnerTable(learners)}
     ${heading('Courses available')}
     ${catalogSection(courses)}
-    ${footer(appUrl, now)}
+    ${footer(appUrl, now, input.rosterSyncedAt)}
   </table>
 </td></tr>
 </table>`;

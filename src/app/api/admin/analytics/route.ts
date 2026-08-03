@@ -42,6 +42,17 @@ export async function GET(request: NextRequest) {
     const sortBy = searchParams.get('sortBy') || 'last_login_at';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
 
+    // People who have left the company are hidden unless explicitly requested.
+    // `users.is_active` is mirrored nightly from the Time-Off app — see
+    // src/app/api/cron/timeoff-sync/route.ts.
+    //
+    // A literal fragment, NOT a bound parameter: the ORDER BY below numbers its
+    // placeholders by hand and they shift depending on whether `search` is
+    // present. Adding a parameter here is exactly the renumbering that silently
+    // breaks the clause.
+    const includeInactive = searchParams.get('includeInactive') === '1';
+    const activeClause = includeInactive ? '' : 'AND u.is_active = true';
+
     // Get all users with aggregated analytics
     const users = await query<UserAnalytics>(`
       WITH login_stats AS (
@@ -111,6 +122,7 @@ export async function GET(request: NextRequest) {
       WHERE
         (${seesEveryone ? 'TRUE' : `u.role != 'super_admin'`} OR u.id = $1)
         AND ${excludeSystemAccountsSql('u.email')}
+        ${activeClause}
       ${search ? `AND (u.email ILIKE $2 OR u.name ILIKE $2)` : ''}
       ORDER BY
         CASE WHEN $${search ? '3' : '2'} = 'last_login_at' AND $${search ? '4' : '3'} = 'desc' THEN u.last_login_at END DESC NULLS LAST,

@@ -62,22 +62,39 @@ export default function AdminReportsPage() {
   const [data, setData] = useState<ReportBundle | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [search, setSearch] = useState('');
+  // Reports describe the CURRENT workforce by default. Employment status is
+  // mirrored nightly from the Time-Off app; people who have left are hidden
+  // unless this is switched on, because their frozen progress is not a training
+  // gap anyone can act on. The data stays one click away rather than deleted.
+  const [includeInactive, setIncludeInactive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
-  const load = useCallback(async (searchTerm: string) => {
+  const load = useCallback(async (searchTerm: string, withInactive: boolean) => {
     setError(null);
     try {
+      // The cohort flag goes to EVERY tab, not just the learner list. Sending it
+      // to some and not others is how the headline KPI stopped agreeing with the
+      // table underneath it in the first place.
+      const params = new URLSearchParams();
+      if (withInactive) params.set('includeInactive', '1');
+      const scopeQs = params.toString() ? `?${params}` : '';
+
+      const learnerParams = new URLSearchParams(params);
+      if (searchTerm) learnerParams.set('search', searchTerm);
+      const learnerQs = learnerParams.toString() ? `?${learnerParams}` : '';
+
       // All five requests in flight together. The previous implementation ran
       // six queries in series inside one route.
-      const qs = searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : '';
       const [summary, learners, courses, compliance, curve] = await Promise.all([
-        getJson<{ kpis: KpiRow; trend: TrendPoint[] }>('/api/admin/reports'),
-        getJson<{ learners: LearnerRow[] }>(`/api/admin/reports/learners${qs}`),
-        getJson<{ courses: CourseRow[] }>('/api/admin/reports/courses'),
-        getJson<{ rows: ComplianceRow[]; summary: ComplianceSummary }>('/api/admin/reports/compliance'),
-        getJson<{ points: CurvePoint[] }>('/api/admin/reports/curve'),
+        getJson<{ kpis: KpiRow; trend: TrendPoint[] }>(`/api/admin/reports${scopeQs}`),
+        getJson<{ learners: LearnerRow[] }>(`/api/admin/reports/learners${learnerQs}`),
+        getJson<{ courses: CourseRow[] }>(`/api/admin/reports/courses${scopeQs}`),
+        getJson<{ rows: ComplianceRow[]; summary: ComplianceSummary }>(
+          `/api/admin/reports/compliance${scopeQs}`
+        ),
+        getJson<{ points: CurvePoint[] }>(`/api/admin/reports/curve${scopeQs}`),
       ]);
 
       setData({
@@ -104,9 +121,9 @@ export default function AdminReportsPage() {
   }, []);
 
   useEffect(() => {
-    const t = setTimeout(() => load(search), search ? 300 : 0);
+    const t = setTimeout(() => load(search, includeInactive), search ? 300 : 0);
     return () => clearTimeout(t);
-  }, [search, load]);
+  }, [search, includeInactive, load]);
 
   const exportView = EXPORTABLE[tab];
 
@@ -114,8 +131,12 @@ export default function AdminReportsPage() {
     if (!exportView) return;
     setExporting(true);
     try {
-      const qs = tab === 'learners' && search ? `&search=${encodeURIComponent(search)}` : '';
-      const res = await fetch(`/api/admin/reports/export?view=${exportView}${qs}`);
+      // The download must match the screen it was taken from — same cohort,
+      // same search term.
+      const params = new URLSearchParams({ view: exportView });
+      if (includeInactive) params.set('includeInactive', '1');
+      if (tab === 'learners' && search) params.set('search', search);
+      const res = await fetch(`/api/admin/reports/export?${params}`);
       if (!res.ok) throw new Error('Export failed');
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -149,6 +170,14 @@ export default function AdminReportsPage() {
               className="w-56 bg-slate-800/50 border-slate-700"
             />
           )}
+          <Button
+            variant="outline"
+            onClick={() => setIncludeInactive((v) => !v)}
+            aria-pressed={includeInactive}
+            className="border-slate-600 text-slate-300 shrink-0"
+          >
+            {includeInactive ? 'Active employees only' : 'Include former employees'}
+          </Button>
           {exportView && canExportData(user) && (
             <Button
               variant="outline"
@@ -180,6 +209,20 @@ export default function AdminReportsPage() {
           </button>
         ))}
       </div>
+
+      {/*
+        State the cohort on every tab, always. A filtered report and an
+        unfiltered one look identical, and the reader has no way to tell which
+        one they are holding — that ambiguity is what put two ex-employees in
+        front of HR in the first place.
+      */}
+      <p className="text-xs text-slate-500">
+        {includeInactive
+          ? `Including former employees${
+              data ? ` — ${data.learners.filter((l) => !l.is_active).length} of ${data.learners.length} shown have left the company` : ''
+            }.`
+          : 'Showing current employees only. Employment status syncs nightly from Time-Off at 03:00 Central.'}
+      </p>
 
       {error && (
         <div className="rounded-md border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">

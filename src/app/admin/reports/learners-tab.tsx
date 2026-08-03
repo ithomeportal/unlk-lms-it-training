@@ -33,7 +33,24 @@ export function LearnersTab({ learners }: { learners: LearnerRow[] }) {
       sortValue: (r) => (r.name || r.email).toLowerCase(),
       cell: (r) => (
         <div className="min-w-0">
-          <p className="truncate font-medium text-white">{r.name || r.email.split('@')[0]}</p>
+          <p className="truncate font-medium text-white">
+            {r.name || r.email.split('@')[0]}
+            {/*
+              Only reachable when "Include former employees" is on, since the
+              query filters them out otherwise. Marked on the row rather than
+              only in the header note: a reader scanning names needs to see it
+              on the name, not infer it from a caption above the table.
+            */}
+            {!r.is_active && (
+              <Badge
+                variant="outline"
+                className="ml-2 border-slate-600 text-[10px] text-slate-400"
+                title="No longer an active employee in Time-Off"
+              >
+                Former employee
+              </Badge>
+            )}
+          </p>
           <p className="truncate text-xs text-slate-500">{r.email}</p>
         </div>
       ),

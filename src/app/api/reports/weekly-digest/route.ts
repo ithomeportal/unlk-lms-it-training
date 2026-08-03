@@ -7,6 +7,7 @@ import {
   fetchLearners,
   fetchTrend,
 } from '@/lib/reports/queries';
+import { lastSuccessfulSyncAt } from '@/lib/timeoff-sync-log';
 import type { ComplianceSummary } from '@/lib/reports/types';
 
 /**
@@ -51,14 +52,20 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Five independent queries, concurrently. `fetchLearners()` with no search
-    // term returns the whole cohort, which is what the digest needs.
-    const [kpis, trend, learners, courses, complianceRows] = await Promise.all([
+    // Six independent queries, concurrently.
+    //
+    // Every fetcher is called with its DEFAULT scope, which is current
+    // employees only — see `learnerScope` in queries.ts. That default is what
+    // keeps ex-employees out of this email; do not pass `includeInactive` here.
+    // The report went to HR naming two people who had left the company because
+    // fetchLearners had no such filter while fetchKpis did.
+    const [kpis, trend, learners, courses, complianceRows, rosterSyncedAt] = await Promise.all([
       fetchKpis(),
       fetchTrend(12),
       fetchLearners(),
       fetchCourses(),
       fetchCompliance(),
+      lastSuccessfulSyncAt(),
     ]);
 
     const summary = complianceRows.reduce<ComplianceSummary>(
@@ -77,6 +84,7 @@ export async function GET(request: NextRequest) {
       courses,
       compliance: { rows: complianceRows, summary },
       appUrl: process.env.NEXT_PUBLIC_APP_URL,
+      rosterSyncedAt,
     });
 
     return NextResponse.json(

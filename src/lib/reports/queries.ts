@@ -31,7 +31,7 @@ type CourseRawRow = Omit<CourseRow, 'completion_rate' | 'quiz_pass_rate' | 'effo
 /**
  * Every SQL statement behind the Reports zone.
  *
- * Two conventions hold throughout:
+ * Three conventions hold throughout:
  *
  * 1. `excludeSystemAccountsSql` is applied to EVERY query that touches users.
  *    The pre-existing reports route applied it to exactly one of its six
@@ -41,20 +41,73 @@ type CourseRawRow = Omit<CourseRow, 'completion_rate' | 'quiz_pass_rate' | 'effo
  * 2. Completion is `status = 'completed' OR completed_at IS NOT NULL`. See
  *    migrations/009: rows exist where those two disagree, and the timestamp is
  *    the trustworthy one.
+ *
+ * 3. **The learner cohort is defined in exactly one place — `learnerScope()` —
+ *    and every query uses it.** This convention is new (2026-08-03) and was
+ *    added the hard way: three of these six queries filtered `is_active = true`
+ *    and three did not, so the weekly HR e-mail counted active-only learners in
+ *    its headline tile while naming ex-employees in the per-learner tables
+ *    below it. The two numbers could not be reconciled by the person reading
+ *    them. Do not hand-write a users predicate here; extend `learnerScope`.
  */
 
 /** Reused everywhere a lesson counts as finished. */
 const LESSON_DONE = `(lp.status = 'completed' OR lp.completed_at IS NOT NULL)`;
 
+/**
+ * Options shared by every fetcher in this file.
+ *
+ * `includeInactive` widens the cohort to people who have left the company.
+ * It defaults to FALSE everywhere — reports are about the current workforce,
+ * and an ex-employee's frozen progress is not a training gap anyone can act on.
+ * The Reports zone exposes it as an explicit toggle so the data stays reachable.
+ */
+export interface ReportScope {
+  includeInactive?: boolean;
+}
+
+/**
+ * Read the cohort toggle off a request's query string.
+ *
+ * Anything other than an explicit opt-in means active-only. Parsing this in one
+ * place keeps the five report routes from each inventing their own truthiness
+ * rule, which is how one tab ends up disagreeing with the next.
+ */
+export function scopeFromParams(params: URLSearchParams): ReportScope {
+  const raw = params.get('includeInactive');
+  return { includeInactive: raw === '1' || raw === 'true' };
+}
+
+/**
+ * The `users` predicate defining "a learner we report on".
+ *
+ * `users.is_active` is mirrored nightly from the Time-Off app, the company's
+ * system of record for employment status — see
+ * `src/app/api/cron/timeoff-sync/route.ts`. Before that sync existed the column
+ * was never written and every account read as active forever.
+ *
+ * Returns a literal fragment rather than a bound parameter, for the same reason
+ * `excludeSystemAccountsSql` does: the analytics query numbers its placeholders
+ * by hand and adding a parameter is how a WHERE clause silently breaks.
+ */
+function learnerScope(scope: ReportScope | undefined, prefix = ''): string {
+  const emailColumn = prefix ? `${prefix}.email` : 'email';
+  const activeColumn = prefix ? `${prefix}.is_active` : 'is_active';
+
+  const clauses = [excludeSystemAccountsSql(emailColumn)];
+  if (!scope?.includeInactive) clauses.unshift(`${activeColumn} = true`);
+  return clauses.join(' AND ');
+}
+
 // ---------------------------------------------------------------------------
 // Executive summary
 // ---------------------------------------------------------------------------
 
-export async function fetchKpis(): Promise<KpiRow> {
+export async function fetchKpis(scope?: ReportScope): Promise<KpiRow> {
   const row = await queryOne<KpiRow>(`
     WITH learners AS (
       SELECT id FROM users
-      WHERE is_active = true AND ${excludeSystemAccountsSql('email')}
+      WHERE ${learnerScope(scope)}
     ),
     activity AS (
       SELECT lp.user_id, MAX(lp.last_accessed_at) AS last_seen
@@ -113,10 +166,10 @@ export async function fetchKpis(): Promise<KpiRow> {
  * Grouping only over rows that exist would silently omit them, and a trend line
  * that skips its empty weeks reads as continuous activity.
  */
-export async function fetchTrend(weeks = 12): Promise<TrendPoint[]> {
+export async function fetchTrend(weeks = 12, scope?: ReportScope): Promise<TrendPoint[]> {
   return query<TrendPoint>(`
     WITH learners AS (
-      SELECT id FROM users WHERE ${excludeSystemAccountsSql('email')}
+      SELECT id FROM users WHERE ${learnerScope(scope)}
     ),
     spine AS (
       SELECT generate_series(
@@ -158,7 +211,7 @@ export async function fetchTrend(weeks = 12): Promise<TrendPoint[]> {
  * flatters everyone: it only ever counts lessons they already opened, so a
  * learner who opened three lessons and finished them reads as 100%.
  */
-export async function fetchLearners(search?: string): Promise<LearnerRow[]> {
+export async function fetchLearners(search?: string, scope?: ReportScope): Promise<LearnerRow[]> {
   const params: unknown[] = [MOMENTUM_WINDOW_DAYS];
   let searchClause = '';
   if (search) {
@@ -170,7 +223,7 @@ export async function fetchLearners(search?: string): Promise<LearnerRow[]> {
     WITH base AS (
       SELECT u.id, u.email, u.name, u.role, u.is_active, u.last_login_at
       FROM users u
-      WHERE ${excludeSystemAccountsSql('u.email')}
+      WHERE ${learnerScope(scope, 'u')}
       ${searchClause}
     ),
     enr AS (
@@ -280,10 +333,10 @@ export async function fetchLearners(search?: string): Promise<LearnerRow[]> {
 // Courses
 // ---------------------------------------------------------------------------
 
-export async function fetchCourses(): Promise<CourseRow[]> {
+export async function fetchCourses(scope?: ReportScope): Promise<CourseRow[]> {
   const rows = await query<CourseRawRow>(`
     WITH learners AS (
-      SELECT id FROM users WHERE ${excludeSystemAccountsSql('email')}
+      SELECT id FROM users WHERE ${learnerScope(scope)}
     )
     SELECT
       c.id, c.title, cat.name AS category_name, c.is_mandatory, c.is_published,
@@ -325,13 +378,14 @@ export async function fetchCourses(): Promise<CourseRow[]> {
   }>(`
     SELECT l.course_id, l.id AS lesson_id, l.title, l.sort_order,
            -- u.id IS NOT NULL is load-bearing: the users join is a LEFT JOIN
-           -- with the system-account filter in its ON clause, so a system
-           -- account's progress row survives with u.id NULL and would
-           -- otherwise still be counted.
+           -- with the cohort filter in its ON clause, so an excluded account's
+           -- progress row survives with u.id NULL and would otherwise still be
+           -- counted. This applies to inactive employees exactly as it does to
+           -- system accounts.
            COUNT(*) FILTER (WHERE u.id IS NOT NULL AND ${LESSON_DONE})::int AS completions
     FROM lessons l
     LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id
-    LEFT JOIN users u ON u.id = lp.user_id AND ${excludeSystemAccountsSql('u.email')}
+    LEFT JOIN users u ON u.id = lp.user_id AND ${learnerScope(scope, 'u')}
     GROUP BY l.course_id, l.id, l.title, l.sort_order
     ORDER BY l.course_id, l.sort_order
   `);
@@ -361,11 +415,11 @@ export async function fetchCourses(): Promise<CourseRow[]> {
  * one row per (assigned learner x mandatory course), stating plainly whether
  * they are done.
  */
-export async function fetchCompliance(): Promise<ComplianceRow[]> {
+export async function fetchCompliance(scope?: ReportScope): Promise<ComplianceRow[]> {
   const rows = await query<Omit<ComplianceRow, 'progress_percent' | 'days_remaining' | 'state'>>(`
     WITH learners AS (
       SELECT id, email, name FROM users
-      WHERE is_active = true AND ${excludeSystemAccountsSql('email')}
+      WHERE ${learnerScope(scope)}
     ),
     assigned AS (
       SELECT l.id AS user_id, l.email, l.name,
@@ -422,11 +476,11 @@ export async function fetchCompliance(): Promise<ComplianceRow[]> {
  * followed by nothing is the classic onboarding burst that never became a
  * habit. Neither is visible in any single-number progress percentage.
  */
-export async function fetchLearningCurve(weeks = 12): Promise<CurvePoint[]> {
+export async function fetchLearningCurve(weeks = 12, scope?: ReportScope): Promise<CurvePoint[]> {
   return query<CurvePoint>(`
     WITH learners AS (
       SELECT id, email, name FROM users
-      WHERE is_active = true AND ${excludeSystemAccountsSql('email')}
+      WHERE ${learnerScope(scope)}
     ),
     spine AS (
       SELECT generate_series(

@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { canViewAdmin } from '@/lib/permissions';
-import { fetchCompliance } from '@/lib/reports/queries';
+import { fetchCompliance, scopeFromParams } from '@/lib/reports/queries';
 
 /**
  * Mandatory-training compliance: one row per assigned learner x required course.
@@ -10,14 +10,14 @@ import { fetchCompliance } from '@/lib/reports/queries';
  * unnoticed — there was no screen anywhere that stated plainly who had and had
  * not completed a required course.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user || !canViewAdmin(user)) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const rows = await fetchCompliance();
+    const rows = await fetchCompliance(scopeFromParams(request.nextUrl.searchParams));
 
     const summary = {
       total: rows.length,

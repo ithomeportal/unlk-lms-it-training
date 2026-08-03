@@ -44,6 +44,9 @@ export default function AdminAnalyticsPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  // Current employees only by default; `is_active` is mirrored nightly from the
+  // Time-Off app. Ex-employees stay reachable behind the toggle.
+  const [includeInactive, setIncludeInactive] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -66,7 +69,9 @@ export default function AdminAnalyticsPage() {
 
   const loadAnalytics = async () => {
     try {
-      const res = await fetch(`/api/admin/analytics?search=${encodeURIComponent(search)}`);
+      const params = new URLSearchParams({ search });
+      if (includeInactive) params.set('includeInactive', '1');
+      const res = await fetch(`/api/admin/analytics?${params}`);
       const data = await res.json();
       setUsers(data.users || []);
       setSummary(data.summary || null);
@@ -82,12 +87,16 @@ export default function AdminAnalyticsPage() {
       loadAnalytics();
     }, 300);
     return () => clearTimeout(debounce);
-  }, [search]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, includeInactive]);
 
   const handleExport = async () => {
     setExporting(true);
     try {
-      const res = await fetch('/api/admin/analytics/export');
+      // Same cohort as the screen, or the CSV silently contains extra people.
+      const res = await fetch(
+        `/api/admin/analytics/export${includeInactive ? '?includeInactive=1' : ''}`
+      );
       if (res.ok) {
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
@@ -145,6 +154,13 @@ export default function AdminAnalyticsPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">User Analytics</h1>
           <p className="text-slate-400">Track user engagement, progress, and quiz performance</p>
+          {/* Say which cohort is on screen — a filtered list and an unfiltered
+              one are indistinguishable otherwise. */}
+          <p className="mt-1 text-xs text-slate-500">
+            {includeInactive
+              ? 'Including former employees.'
+              : 'Current employees only — status syncs nightly from Time-Off.'}
+          </p>
         </div>
         <div className="flex items-center gap-4">
           <div className="w-64">
@@ -155,6 +171,14 @@ export default function AdminAnalyticsPage() {
               className="bg-slate-800/50 border-slate-700 text-white"
             />
           </div>
+          <Button
+            onClick={() => setIncludeInactive((v) => !v)}
+            aria-pressed={includeInactive}
+            variant="outline"
+            className="border-slate-700 text-slate-300 hover:bg-slate-700 shrink-0"
+          >
+            {includeInactive ? 'Active only' : 'Include former'}
+          </Button>
           {canExportData(currentUser) && (
             <Button
               onClick={handleExport}

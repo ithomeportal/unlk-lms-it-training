@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { canViewAdmin } from '@/lib/permissions';
-import { fetchLearners } from '@/lib/reports/queries';
+import { fetchLearners, scopeFromParams } from '@/lib/reports/queries';
 
 /** Per-learner rollup: courses completed, time spent, quiz performance, status. */
 export async function GET(request: NextRequest) {
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     }
 
     const search = request.nextUrl.searchParams.get('search')?.trim() || undefined;
-    const learners = await fetchLearners(search);
+    const learners = await fetchLearners(search, scopeFromParams(request.nextUrl.searchParams));
 
     return NextResponse.json({ success: true, data: { learners } });
   } catch (error) {

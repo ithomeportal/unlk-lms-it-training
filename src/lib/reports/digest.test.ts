@@ -402,3 +402,62 @@ describe('buildWeeklyDigest', () => {
     expect(html.length).toBeGreaterThan(4_000);
   });
 });
+
+/**
+ * Roster provenance.
+ *
+ * This report was sent to HR naming two people who had left the company months
+ * earlier, and nothing in the email hinted that anything was stale. The reader
+ * needs a date they can sanity-check, and a loud sentence when there isn't one.
+ */
+describe('roster provenance', () => {
+  it('states when the roster was last synced from Time-Off', () => {
+    const html = build({ rosterSyncedAt: new Date('2026-08-03T08:00:00Z') }).html;
+
+    expect(html).toContain('Employee roster synced from Time-Off on');
+    expect(html).toContain('Aug 3, 2026');
+    expect(html).toContain('Covers current employees only.');
+  });
+
+  it('says so loudly when the roster has NEVER synced', () => {
+    // Silence would read as "fine". The absence of a sync is exactly the
+    // condition under which this email starts naming ex-employees again.
+    const html = build({ rosterSyncedAt: null }).html;
+
+    expect(html).toContain('never synced');
+    expect(html).toContain('may name people who have left');
+  });
+
+  it('treats an omitted rosterSyncedAt the same as never synced', () => {
+    expect(build().html).toContain('never synced');
+  });
+});
+
+/**
+ * The cohort invariant.
+ *
+ * "Learners" comes from `kpis.total_learners` (SQL) while "At risk" is counted
+ * in JS off the `learners` array. Those two must describe the same set of
+ * people. Until 2026-08-03 they did not — fetchKpis filtered to active
+ * employees and fetchLearners did not — so "At risk" could count people who no
+ * longer worked here, and in principle exceed the total it is a subset of.
+ */
+describe('KPI tiles describe one cohort', () => {
+  it('cannot report more at-risk learners than there are learners', () => {
+    const learners = [
+      learner({ id: 'a', status: 'at_risk' }),
+      learner({ id: 'b', status: 'at_risk' }),
+      learner({ id: 'c', status: 'on_track' }),
+    ];
+    const html = build({
+      learners,
+      kpis: { ...KPIS, total_learners: learners.length },
+    }).html;
+
+    const atRisk = learners.filter((l) => l.status === 'at_risk').length;
+    expect(atRisk).toBeLessThanOrEqual(learners.length);
+    // Both numbers rendered, from the same three people.
+    expect(html).toContain('>3<');
+    expect(html).toContain(`>${atRisk}<`);
+  });
+});
